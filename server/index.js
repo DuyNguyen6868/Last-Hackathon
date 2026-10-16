@@ -5,7 +5,10 @@ import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 
 const PORT = process.env.PORT || 8787;
-const MODEL = 'claude-haiku-5-5';
+// Chọn model bằng CLAUDE_MODEL trong .env (xem .env.example), không đặt thì dùng Haiku cho nhanh
+const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-5-5';
+// Fallback phía server khi model từ chối trả lời: chỉ các model này hỗ trợ
+const SUPPORTS_FALLBACK = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1'].includes(MODEL);
 
 const SYSTEM = `Bạn là bình luận viên quyền anh robot trên truyền hình, giọng hào hứng, kịch tính.
 Trận đấu: người chơi thật (p1, robot XANH) điều khiển bằng cách đấm trước webcam, đấu với robot ĐỎ do AI điều khiển (p2).
@@ -23,9 +26,10 @@ app.post('/commentary', async (req, res) => {
   const { round, kind, winner, difficulty, hp, stats } = req.body ?? {};
   const summary = JSON.stringify({ round, kind, winner, difficulty, hp, stats });
   try {
-    const msg = await client.messages.create(
+    const msg = await (SUPPORTS_FALLBACK ? client.beta.messages : client.messages).create(
       {
         model: MODEL,
+        ...(SUPPORTS_FALLBACK && { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }),
         max_tokens: 1024,
         output_config: { effort: 'low' },
         system: SYSTEM,
@@ -49,4 +53,4 @@ app.post('/commentary', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Commentary proxy: http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Commentary proxy: http://localhost:${PORT} (model ${MODEL})`));
