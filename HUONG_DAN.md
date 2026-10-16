@@ -96,9 +96,13 @@ src/
   game/hud.js          # Duy: thanh máu, đồng hồ, banner, bình luận
   vision/pose.js       # Chiến: webcam, PoseLandmarker, vẽ khung xương
   vision/detector.js   # Chiến: luật nhận diện đấm, đỡ, né
-  render/scene.js      # Thành: đấu trường, camera, tia lửa, rung màn hình
-  render/robot.js      # Thành: robot hình khối, IK cánh tay, animation
-  render/sfx.js        # Thành: âm thanh tổng hợp bằng WebAudio
+  render/index.js      # Thành: initRender, nghe event bus và điều khiển robot, hiệu ứng, âm thanh
+  render/stage.js      # Thành: đấu trường neon, camera, đèn
+  render/robot.js      # Thành: robot, các kênh khớp, găng sáng cam khi lấy đà
+  render/anim.js       # Thành: animation đấm, đỡ, né, trúng, KO, lấy đà (poses.js + tween.js)
+  render/effects.js    # Thành: tia lửa, vòng sáng, rung màn hình
+  render/audio.js      # Thành: âm thanh tổng hợp bằng WebAudio
+  render/scene.js, sfx.js  # lớp tương thích để main.js gọi vào code của Thành
   ai/opponent.js       # Tiến Anh: FSM cho ZEUS, 3 mức khó
   ai/commentary.js     # Tiến Anh: gọi /api/commentary, có câu dự phòng
 server/index.js        # Tiến Anh: proxy Claude API
@@ -145,8 +149,34 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 | `TIMER` | `{ seconds }` | Đồng hồ hiệp |
 | `ROUND` | `{ round, state: 'countdown'\|'fight'\|'end'\|'ko'\|'over', winner?, stats?, wins }` | Trạng thái hiệp và trận |
 | `COMMENTARY` | `{ text }` | Câu bình luận hiện trên màn hình |
+| `TELEGRAPH` | `{ who, hand, kind, ms }` | AI đang lấy đà, `ms` sau sẽ ra đòn. Render làm găng sáng cam và phát tiếng nạp lực |
+| `COMBO` | `{ who, target, name, damage }` | Combo hoặc phản đòn trúng (`name` có thể là `'COUNTER + ONE-TWO'`) |
 
-**Phím mặc định (p1):** `J` jab trái · `K` jab phải · `U` hook trái · `I` hook phải · `L` giữ để đỡ · `A`/`D` né.
+**Phím mặc định (p1):** `J` jab trái · `K` jab phải · `U` hook trái · `I` hook phải · `L` giữ để đỡ · `A`/`D` né (bấm khi thấy găng ZEUS sáng cam).
+
+### Combo và phản đòn
+
+Combo yêu cầu đổi tay luân phiên, mỗi đòn cách nhau tối đa 0.9 giây, và đòn cuối phải trúng. Nếu một đòn bị né thì chuỗi bị đứt. Thưởng sát thương cộng dồn theo từng bước, ví dụ J→K→U→I lần lượt kích hoạt ONE-TWO, TRIPLE THREAT rồi STEEL STORM.
+
+| Combo | Chuỗi | Thưởng |
+|---|---|---|
+| ONE-TWO | jab → jab | +2 |
+| HAMMER | hook → hook | +5 |
+| TRIPLE THREAT | jab → jab → hook | +4, choáng 400ms |
+| STEEL STORM | jab → jab → hook → hook | +7, choáng 600ms |
+| COUNTER | Né hoặc đỡ thành công, rồi đấm trúng trong 0.9 giây | ×1.5 |
+
+### Đối thủ AI: lấy đà và hệ số sát thương
+
+Trước mỗi cú đấm, ZEUS phát `TELEGRAPH` rồi chờ `windupMs` mới phát `PUNCH`. Thời gian người chơi có để phản ứng là `windupMs + hitDelayMs`. Bấm né nhanh rồi thả cũng tính, miễn là bấm sau khi ZEUS bắt đầu lấy đà cú đó (mỗi cú cần né riêng). Cửa sổ né `dodgeWindowMs` (1000ms) phải dài hơn `windupMs + hitDelayMs`.
+
+| Độ khó | windupMs | Hệ số sát thương | Combo dài nhất |
+|---|---|---|---|
+| Easy | 750 | ×0.5 | 2 đòn |
+| Normal | 550 | ×0.7 | 3 đòn |
+| Hard | 420 | ×0.9 | 4 đòn |
+
+Các đòn nối tiếp trong một combo của AI lấy đà ngắn hơn (khoảng 55% `windupMs`).
 
 ---
 
@@ -157,10 +187,11 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 ### 👑 Duy: trưởng nhóm, ghép code và logic game
 - [x] Khung dự án, `events.js`, `keyboard.js`, `main.js` **(đã có khung)**
 - [x] Game state: máu, 3 hiệp × 60 giây, KO, thắng theo số hiệp **(đã có khung)**
-- [x] Luật trúng đòn: đòn mất 250ms mới chạm, đỡ thì sát thương ×0.2, né trong 650ms đầu thì trượt, bị trúng thì choáng 220ms **(đã có khung)**
+- [x] Luật trúng đòn: đòn mất 250ms mới chạm, đỡ thì sát thương ×0.2, né (giữ hoặc bấm nhanh sau khi đối thủ lấy đà) trong 1000ms thì trượt, bị trúng thì choáng 220ms **(đã có khung)**
+- [x] Combo (ONE-TWO, HAMMER, TRIPLE THREAT, STEEL STORM), phản đòn ×1.5, popup NÉ!/ĐỠ!/combo trên HUD **(đã có khung)**
 - [x] HUD: thanh máu, đồng hồ, cúp thắng hiệp, banner ROUND / FIGHT! / K.O. **(đã có khung)**
 - [ ] Chơi thử nhiều lần và cân bằng các số trong `config.js` (sát thương, thời gian hiệp)
-- [ ] *(Nếu kịp)* combo jab-jab-hook gây thêm sát thương, chế độ 2 người chơi (p2 dùng phím mũi tên)
+- [ ] *(Nếu kịp)* chế độ 2 người chơi (p2 dùng phím mũi tên)
 - [ ] Review và merge, chủ trì ghép code, deploy lên Vercel hoặc GitHub Pages
 
 ### 👁️ Chiến: vision
@@ -174,7 +205,8 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 - [x] Đấu trường, 4 cột, 3 tầng dây, đèn spotlight và đèn viền xanh/đỏ **(đã có khung)**
 - [x] Robot hình khối, tay 2 đoạn giải bằng IK, animation jab, hook, đỡ, né, trúng đòn, KO **(đã có khung)**
 - [x] Tia lửa, rung camera, robot nháy đỏ khi trúng, âm thanh tổng hợp bằng WebAudio **(đã có khung)**
-- [ ] Chỉnh góc camera (`camBase`, `lookAt` trong `scene.js`) để thấy rõ cả hai robot
+- [x] Găng sáng cam và tiếng nạp lực khi AI lấy đà (`TELEGRAPH`), hiệu ứng vàng khi combo (`COMBO`) **(đã có khung)**
+- [ ] Chỉnh góc camera trong `stage.js` để thấy rõ cả hai robot
 - [ ] Làm robot ngầu hơn: thêm chi tiết như ống xả, đèn ngực, vai giáp. Hiện số sát thương bay lên khi trúng đòn
 - [ ] *(Nếu kịp)* thay âm thanh tổng hợp bằng file thật, thêm tiếng khán giả
 
@@ -182,7 +214,8 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 - [x] FSM cho ZEUS: phản ứng khi p1 vừa đấm (đỡ hoặc né), dùng hook khi p1 đỡ lâu, combo, thủ nhiều hơn khi máu thấp, 3 mức khó **(đã có khung)**
 - [x] `server/index.js` gọi Claude để bình luận sau mỗi hiệp, `ai/commentary.js` có câu dự phòng **(đã có khung)**
 - [ ] Lấy API key, chạy `npm run server`, thử và chỉnh prompt bình luận cho hay hơn
-- [x] Cân bằng `DIFF` trong `opponent.js` để Easy dễ thắng, Hard khó thật (đo bằng `node src/ai/dev/balance.mjs`)
+- [x] ZEUS lấy đà trước mỗi đòn, đánh combo, sát thương giảm theo độ khó **(đã có khung)**
+- [x] Cân bằng `DIFF` trong `opponent.js` (`windupMs`, `damage`, `aggro`, `combo`) để Easy dễ thắng, Hard khó thật (đo bằng `node src/ai/dev/balance.mjs`)
 - [x] *(Nếu kịp)* LLM làm huấn luyện viên cho ZEUS: giữa hiệp trả về JSON chiến thuật (`src/ai/coach.js`, `POST /api/coach`; server lỗi thì dùng luật), xem llm-colosseum trong [REPOS.md](REPOS.md)
 - [ ] Slide pitch (5–6 slide), kịch bản demo, **quay video dự phòng** lúc 3:30
 

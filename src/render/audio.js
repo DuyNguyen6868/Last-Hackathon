@@ -98,6 +98,16 @@ export const sfx = {
       tone({ f0: 2217, dur: 0.7, gain: 0.1, at });
     }
   },
+  // Tiếng "nạp lực" khi đối thủ lấy đà, kéo dài đúng bằng thời gian lấy đà
+  charge(sec = 0.5) {
+    if (!ready()) return;
+    tone({ type: 'square', f0: 220, f1: 880, dur: sec, gain: 0.05 });
+    tone({ f0: 440, f1: 1760, dur: sec, gain: 0.06 });
+  },
+  combo() {
+    if (!ready()) return;
+    [523, 659, 784, 1047].forEach((f0, i) => tone({ type: 'triangle', f0, dur: 0.28, gain: 0.22, at: i * 0.06 }));
+  },
   ko() {
     if (!ready()) return;
     tone({ type: 'sawtooth', f0: 220, f1: 35, dur: 0.9, gain: 0.35 });

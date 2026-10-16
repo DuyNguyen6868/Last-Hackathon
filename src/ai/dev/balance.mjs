@@ -45,23 +45,27 @@ const between = (a, b) => a + Math.random() * (b - a);
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // ---- người chơi giả ----
-// Người chơi thật đứng trước webcam phản ứng chậm (~300ms + độ trễ vision), không kịp né từng cú 250ms,
-// nên chỉ đỡ/né được khi đoán trước nhịp đánh của ZEUS.
-function makeBot({ punchEvery, hookRate, guardOnZeusPunch, dodgeOnZeusPunch, punishAfterBlock, randomGuard }) {
+// Người chơi thật đứng trước webcam phản ứng chậm (thời gian phản xạ + độ trễ vision). ZEUS lấy đà
+// (TELEGRAPH, găng sáng cam) windupMs trước mỗi cú, nên người chơi có thể thấy rồi đỡ/né nếu đủ nhanh.
+function makeBot({ punchEvery, hookRate, reactMs, guardOnTelegraph, dodgeOnTelegraph, punishAfterBlock, randomGuard }) {
   let nextPunch = 0;
   let releaseAt = 0;
   const p1 = (type, payload) => emit(type, { who: 'p1', ...payload });
 
-  on('ANIM', ({ who, name }) => {
-    if (who !== 'p2' || game.phase !== 'fight' || !/^(jab|hook)_/.test(name)) return;
+  on('TELEGRAPH', ({ who }) => {
+    if (who !== 'p2' || game.phase !== 'fight') return;
     const r = Math.random();
-    if (r < guardOnZeusPunch) {
-      p1('GUARD', { on: true });
-      releaseAt = clock + between(350, 600);
-    } else if (r < guardOnZeusPunch + dodgeOnZeusPunch) {
-      p1('DODGE', { dir: rand(['L', 'R']) });
-      releaseAt = clock + 450;
-    }
+    if (r >= guardOnTelegraph + dodgeOnTelegraph) return; // không để ý
+    setTimeout(() => {
+      if (game.phase !== 'fight') return;
+      if (r < guardOnTelegraph) {
+        p1('GUARD', { on: true });
+        releaseAt = clock + between(400, 700);
+      } else {
+        p1('DODGE', { dir: rand(['L', 'R']) });
+        releaseAt = clock + 450;
+      }
+    }, between(...reactMs));
   });
   on('HIT', ({ target, blocked }) => {
     // đỡ được thì đấm trả ngay
@@ -95,11 +99,11 @@ function makeBot({ punchEvery, hookRate, guardOnZeusPunch, dodgeOnZeusPunch, pun
 
 const BOTS = {
   casual: {
-    punchEvery: [900, 1500], hookRate: 0.3, guardOnZeusPunch: 0.05, dodgeOnZeusPunch: 0.03,
+    punchEvery: [900, 1500], hookRate: 0.3, reactMs: [400, 650], guardOnTelegraph: 0.25, dodgeOnTelegraph: 0.1,
     punishAfterBlock: 0.1, randomGuard: 0.002,
   },
   skilled: {
-    punchEvery: [550, 900], hookRate: 0.35, guardOnZeusPunch: 0.3, dodgeOnZeusPunch: 0.1,
+    punchEvery: [550, 900], hookRate: 0.35, reactMs: [300, 450], guardOnTelegraph: 0.4, dodgeOnTelegraph: 0.3,
     punishAfterBlock: 0.6, randomGuard: 0.004,
   },
 };

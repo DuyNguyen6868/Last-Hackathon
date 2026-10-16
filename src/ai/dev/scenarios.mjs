@@ -85,7 +85,7 @@ async function runOnce(sc) {
   pending.p2 = [];
   t0 = Date.now();
   await sc.run();
-  await wait(1600);
+  await wait(2400); // đủ cho cả chuỗi phản đòn có lấy đà
   return log.slice();
 }
 

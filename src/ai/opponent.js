@@ -3,12 +3,14 @@
 // Chỉ giao tiếp qua event bus: nghe hành động của p1, phát PUNCH / GUARD / DODGE cho p2.
 import { on, emit } from '../events.js';
 import { CONFIG } from '../config.js';
+import { setDamageScale } from '../game/game.js';
 import { tauntLine, interruptedLine, winLine, loseLine, say } from './taunt.js';
 
 const ME = 'p2';
 const TICK_MS = 100;
 const HIT_DELAY_MS = CONFIG.hitDelayMs; // game tính trúng đòn sau khoảng này, phản xạ phải nhanh hơn
 const GAP = CONFIG.punchCooldownMs + 50; // game bỏ qua cú đấm ra quá sát cú trước, nên combo phải giãn ra
+const FOLLOW_UP_WINDUP = 0.55; // các đòn nối tiếp trong combo lấy đà ngắn hơn cú đầu
 
 // Đòn từ tay nào của p1 thì né sang hướng nào:   opposite: tay L → né R      same: tay L → né L
 // game.js tính né theo thời gian (CONFIG.dodgeWindowMs), không theo hướng, nên đây chỉ là chuyện hình ảnh.
@@ -38,17 +40,22 @@ export const DIFF = {
   // smartDodge: né đúng hướng · doubleSlip: né liên tiếp khi p1 ra 2 đòn · combo: xác suất jab-jab-hook
   // counter: xác suất phản đòn sau khi thủ/né · slipCounters: các kiểu phản đòn sau khi né
   // guardUp: xác suất tự thủ/né khi chưa ra đòn · hookBias: xác suất đấm hook thay vì jab
+  // windupMs: lấy đà (găng sáng cam) trước khi đấm, người chơi có windupMs + hitDelayMs để né/đỡ
+  // damage: hệ số sát thương của ZEUS
   easy: {
     react: 0.2, reactMs: 210, dodgeBias: 0.5, aggro: 0.3, cooldownMs: 1500, stunMs: 350, hookBias: 0.15,
     smartDodge: false, doubleSlip: false, combo: 0, counter: 0, slipCounters: [], guardUp: 0.12,
+    windupMs: 750, damage: 0.5,
   },
   normal: {
-    react: 0.4, reactMs: 160, dodgeBias: 0.5, aggro: 0.35, cooldownMs: 1200, stunMs: 250, hookBias: 0.2,
+    react: 0.62, reactMs: 160, dodgeBias: 0.5, aggro: 0.62, cooldownMs: 780, stunMs: 250, hookBias: 0.2,
     smartDodge: false, doubleSlip: false, combo: 0.15, counter: 0.25, slipCounters: ['slipHook'], guardUp: 0.12,
+    windupMs: 360, damage: 1.0,
   },
   hard: {
-    react: 0.62, reactMs: 90, dodgeBias: 0.6, aggro: 0.62, cooldownMs: 750, stunMs: 120, hookBias: 0.25,
-    smartDodge: true, doubleSlip: true, combo: 0.35, counter: 0.5, slipCounters: ['slipHook', 'slipJabHook'], guardUp: 0.12,
+    react: 0.86, reactMs: 90, dodgeBias: 0.6, aggro: 0.8, cooldownMs: 550, stunMs: 120, hookBias: 0.25,
+    smartDodge: true, doubleSlip: true, combo: 0.35, counter: 0.72, slipCounters: ['slipHook', 'slipJabHook'], guardUp: 0.12,
+    windupMs: 280, damage: 1.0,
   },
 };
 
@@ -71,6 +78,8 @@ let stateUntil = 0;
 let stunUntil = 0;
 let lastAttack = 0;
 let queue = []; // các cú đấm đang chờ: { at, hand, kind }
+let chain = false; // đã ra cú đầu của lượt tấn công này chưa
+let windupTimer = null; // cú đấm đang lấy đà
 let reactTimer = null;
 let guarding = false;
 let dodging = null;
@@ -109,9 +118,23 @@ function releaseDefense() {
   setDodge(null);
 }
 
-function punch(hand, kind) {
-  emit('PUNCH', { who: ME, hand, kind, power: power() });
-  lastAttack = Date.now();
+// Lấy đà rồi mới đấm: phát TELEGRAPH (render làm găng sáng cam, kêu tiếng nạp lực), sau windup mới phát PUNCH
+function punch(hand, kind, followUp = false) {
+  const windup = Math.round(followUp ? Math.max(cfg.windupMs * FOLLOW_UP_WINDUP, 250) : cfg.windupMs);
+  lastAttack = Date.now() + windup; // GAP tính từ lúc cú đấm thật sự ra
+  emit('TELEGRAPH', { who: ME, hand, kind, ms: windup });
+  windupTimer = setTimeout(() => {
+    windupTimer = null;
+    emit('PUNCH', { who: ME, hand, kind, power: power() });
+  }, windup);
+}
+
+// Huỷ cú đang lấy đà (bị trúng đòn, chuyển sang thủ, hết hiệp)
+function cancelWindup() {
+  if (!windupTimer) return;
+  clearTimeout(windupTimer);
+  windupTimer = null;
+  emit('ANIM', { who: ME, name: 'idle' }); // tắt găng sáng cam
 }
 
 // Khiêu khích chỉ dùng GUARD / DODGE (không đấm) nên render và game không cần sửa gì.
@@ -180,10 +203,12 @@ function defaultPlan() {
   return [[0, rand(['L', 'R']), kind]];
 }
 
-function startAttack(plan = defaultPlan()) {
+// quick: phản đòn sau khi thủ/né lấy đà ngắn ngay từ cú đầu (giống đòn nối trong combo)
+function startAttack(plan = defaultPlan(), { quick = false } = {}) {
   releaseDefense();
   const now = Date.now();
   queue = plan.map(([dt, hand, kind]) => ({ at: now + dt, hand, kind }));
+  chain = quick;
   enter('ATTACK');
   firePunches(now); // cú đầu ra ngay, không chờ tick sau (nếu chờ thì khoảng cách tới cú sau bị ngắn lại)
 }
@@ -192,7 +217,8 @@ function firePunches(now) {
   // game bỏ qua cú đấm ra quá sát cú trước, nên luôn giữ đủ khoảng GAP
   while (queue.length && queue[0].at <= now && now - lastAttack >= GAP) {
     const p = queue.shift();
-    punch(p.hand, p.kind);
+    punch(p.hand, p.kind, chain);
+    chain = true;
   }
 }
 
@@ -213,6 +239,7 @@ function dodgeDirFor(p1Hand) {
 
 function defend(p1Hand, delay = 0) {
   queue = [];
+  cancelWindup();
   if (Math.random() >= cfg.dodgeBias) {
     setDodge(null);
     setGuard(true);
@@ -291,7 +318,7 @@ function tick() {
         if (c) {
           lastCounter = { name: c.name, at: now };
           log('counter', c.name);
-          startAttack(c.plan);
+          startAttack(c.plan, { quick: true });
         } else enter('RECOVER', 150);
       }
       break;
@@ -323,6 +350,7 @@ function reset() {
   clearTimeout(reactTimer);
   reactTimer = null;
   queue = [];
+  cancelWindup();
   script = [];
   defense = null;
   stunUntil = 0;
@@ -332,6 +360,7 @@ function reset() {
 
 function rebuildCfg() {
   cfg = { ...DIFF[diffName], ...tactics, ...testOverrides };
+  setDamageScale(ME, cfg.damage);
 }
 
 // overrides: chỉnh tạm vài thông số (dùng cho kịch bản test), ví dụ { react: 1, dodgeBias: 1 }
@@ -397,6 +426,7 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt
     // bị trúng đòn thì khựng lại một chút, bỏ combo đang dở; đang né mà vẫn trúng thì mất quyền phản đòn
     if (target === ME && !blocked && active) {
       queue = [];
+      cancelWindup();
       stunUntil = Date.now() + Math.max(cfg.stunMs, CONFIG.hitStunMs);
       if (defense) defense.failed = true;
       if (state === 'ATTACK') enter('RECOVER', 0);
