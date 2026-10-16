@@ -9,6 +9,8 @@ export const CHANNELS = [
   'headX', 'headY',            // đầu
   'shLx', 'shLz', 'elL',       // vai trái (tiến/ra ngoài), khuỷu trái
   'shRx', 'shRz', 'elR',       // vai phải, khuỷu phải
+  'spineX',                    // gập/ngả thân trên quanh eo (+ = cúi tới trước)
+  'hipL', 'kneeL', 'hipR', 'kneeR', // hông (âm = đùi đưa ra trước) và gối (dương = gập)
 ];
 
 const common = { bodyX: 0, bodyY: 0, bodyZ: 0, bodyRx: 0, bodyRz: 0, twist: 0, headX: 0, headY: 0 };
@@ -18,20 +20,28 @@ export const BASE = {
     ...common,
     shLx: -0.4, shLz: 0.14, elL: -0.7,
     shRx: -0.4, shRz: -0.14, elR: -0.7,
+    spineX: 0.04,
+    hipL: -0.2, kneeL: 0.4, hipR: -0.12, kneeR: 0.32,
   },
   guard: {
     ...common,
     headX: 0.15,
     shLx: -0.85, shLz: -0.18, elL: -1.75,
     shRx: -0.85, shRz: 0.18, elR: -1.75,
+    spineX: 0.14,
+    hipL: -0.3, kneeL: 0.55, hipR: -0.2, kneeR: 0.45,
   },
 };
 
 // Lật trái <-> phải cho một cặp (kênh, giá trị)
+const PAIRS = { shLx: 'shRx', elL: 'elR', hipL: 'hipR', kneeL: 'kneeR' };
+const PAIRS_BACK = Object.fromEntries(Object.entries(PAIRS).map(([a, b]) => [b, a]));
+
 export function mirrorEntry(key, v) {
-  if (key === 'shLx') return ['shRx', v];
+  if (PAIRS[key]) return [PAIRS[key], v];
+  if (PAIRS_BACK[key]) return [PAIRS_BACK[key], v];
   if (key === 'shLz') return ['shRz', -v];
-  if (key === 'elL') return ['elR', v];
+  if (key === 'shRz') return ['shLz', -v];
   if (key === 'twist' || key === 'bodyX' || key === 'bodyRz' || key === 'headY') return [key, -v];
   return [key, v];
 }

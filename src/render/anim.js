@@ -2,25 +2,26 @@ import { BASE, CHANNELS, mirrorPose } from './poses.js';
 
 // peak: tư thế đỉnh của đòn · out/hold/back: ms đưa ra / giữ / thu về
 const JAB_L = {
-  peak: { shLx: -1.52, shLz: -0.04, elL: -0.08, twist: -0.3, bodyZ: 0.4, headX: 0.05 },
+  peak: { shLx: -1.52, shLz: -0.04, elL: -0.08, twist: -0.3, bodyZ: 0.4, headX: 0.05, spineX: 0.12, hipL: -0.55, kneeL: 0.85, hipR: 0.08, kneeR: 0.2 },
   out: 110, hold: 50, back: 190,
 };
 const HOOK_L = {
-  peak: { shLx: -1.05, shLz: 0.95, elL: -1.55, twist: -0.85, bodyZ: 0.18 },
+  peak: { shLx: -1.05, shLz: 0.95, elL: -1.55, twist: -0.85, bodyZ: 0.18, hipL: -0.35, kneeL: 0.65, hipR: 0.0, kneeR: 0.25 },
   out: 170, hold: 60, back: 240,
 };
 const DODGE_L = {
-  peak: { bodyX: 0.55, bodyRz: -0.28 },
+  peak: { bodyX: 0.55, bodyRz: -0.28, spineX: 0.22, hipL: -0.55, kneeL: 1.0, hipR: -0.5, kneeR: 0.95 },
   out: 110, hold: 650, back: 220,
 };
 const HIT = {
-  peak: { bodyRx: -0.2, bodyZ: -0.15, headX: -0.45, twist: 0.15 },
+  peak: { bodyRx: -0.2, bodyZ: -0.15, headX: -0.45, twist: 0.15, spineX: -0.22, hipL: -0.05, kneeL: 0.25, hipR: 0.05, kneeR: 0.2 },
   out: 70, hold: 60, back: 280,
 };
 const KO = {
   peak: {
     bodyRx: -1.45, bodyY: 0.14, bodyZ: -0.7, headX: -0.4, twist: 0.2,
     shLx: -0.1, shLz: 1.0, elL: -0.3, shRx: -0.1, shRz: -1.0, elR: -0.3,
+    spineX: -0.25, hipL: -0.1, kneeL: 0.9, hipR: 0.25, kneeR: 0.35,
   },
   out: 700, hold: 0, back: 0,
 };
