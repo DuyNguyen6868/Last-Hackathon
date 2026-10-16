@@ -11,8 +11,8 @@ import { PALETTES } from './robot.js';
 // A-pose, nhìn về +z (mặc định của glTF/Mixamo). Nếu model nhìn ngược, đặt yaw: Math.PI.
 
 export const GLB_MODELS = {
-  p1: { url: '/models/atom.glb' },
-  p2: { url: '/models/zeus.glb' },
+  p1: { url: `${import.meta.env?.BASE_URL ?? '/'}models/atom.glb` },
+  p2: { url: `${import.meta.env?.BASE_URL ?? '/'}models/zeus.glb` },
   // Tuỳ chọn cho từng model:
   //   height: chiều cao robot trong cảnh (mặc định 2.9, robot hình khối cao ~2.9)
   //   yaw:    xoay model quanh trục dọc nếu nó không nhìn về +z
