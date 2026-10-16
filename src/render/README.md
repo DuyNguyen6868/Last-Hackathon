@@ -47,3 +47,17 @@ Phím: `J/K` jab · `U/I` hook · giữ `L` đỡ · `A/D` né · `1/2/3` trúng
 | `audio.js` | Âm thanh tổng hợp bằng WebAudio (không cần file) |
 
 Chỉnh nhanh: tư thế/đòn đánh trong `poses.js` và `anim.js`; màu robot trong `PALETTES` (`robot.js`); độ sáng đèn trong `scene.js`.
+
+## Robot dùng model .glb (Atom, Zeus)
+
+Đặt `public/models/atom.glb` (p1) và `public/models/zeus.glb` (p2). Có file thì `robot-glb.js` tự thay robot
+hình khối, không có hoặc tải lỗi thì giữ robot hình khối (xem log `[render] ...` trong console).
+
+Yêu cầu model: có xương (Mixamo/Unreal/Blender đều được), đứng T-pose hoặc A-pose, nhìn về +z, dưới ~5MB và ~30k tam giác.
+Loader tự dò xương theo tên (`LeftArm`, `LeftForeArm`, `LeftHand`, `Head`...) và tự tính hướng xoay từng khớp,
+nên không cần chỉnh dấu/trục theo từng model.
+
+Chỉnh cho từng model trong `GLB_MODELS` (`robot-glb.js`): `height`, `yaw` (nếu model nhìn ngược), `bones` (ghi đè tên xương).
+Debug trong console: `robots.p1.missing` (khớp không dò ra xương), `robots.p1.bones` (xương đã dò).
+Model không có xương: chỉ có chuyển động cả thân (lao tới, né, ngã), tay không cử động.
+Tắt thử tải: `initRender({ bus, glb: false })`.

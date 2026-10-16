@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { buildStage } from './stage.js';
 import { createRobot } from './robot.js';
+import { loadGlbRobots } from './robot-glb.js';
 import { playAnim } from './anim.js';
 import { Effects } from './effects.js';
 import { Tweens } from './tween.js';
@@ -15,9 +16,10 @@ import { initAudio, sfx } from './audio.js';
  *   bus: { on(type, fn), emit(type, payload) }  (event bus của dự án)
  *   container: phần tử chứa canvas (mặc định document.body, canvas phủ kín)
  *   bloom: tắt (false) nếu máy demo yếu
+ *   glb: false để không thử tải model .glb (public/models/atom.glb, zeus.glb)
  * Lắng nghe: ANIM, HIT, ROUND. Không phát event nào.
  */
-export function initRender({ container = document.body, bus, bloom = true } = {}) {
+export function initRender({ container = document.body, bus, bloom = true, glb = true } = {}) {
   if (!bus?.on) throw new Error('initRender cần { bus } có hàm on(type, fn)');
 
   const isBody = container === document.body;
@@ -40,6 +42,7 @@ export function initRender({ container = document.body, bus, bloom = true } = {}
   robots.p1.group.rotation.y = Math.PI;
   robots.p2.group.position.set(0.55, 0, -2.2);
   scene.add(robots.p1.group, robots.p2.group);
+  if (glb) loadGlbRobots(robots, scene); // có file .glb thì thay robot hình khối, không có thì giữ nguyên
 
   const tweens = new Tweens();
   const fx = new Effects(scene, camera);
