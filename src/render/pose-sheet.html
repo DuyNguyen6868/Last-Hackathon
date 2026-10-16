@@ -20,6 +20,7 @@ document.body.appendChild(renderer.domElement);
 const { scene } = buildStage(renderer);
 const robot = createRobot(id);
 scene.add(robot.group);
+await robot.ready;
 
 const POSES = [
   ['idle', 0], ['guard', 220], ['jab_L', 125], ['jab_R', 125], ['hook_L', 200],

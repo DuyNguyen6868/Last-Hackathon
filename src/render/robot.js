@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { BASE } from './poses.js';
+import { loadModel, buildModelRig, CREDIT } from './glbRig.js';
 
 // Hai robot lấy cảm hứng từ phim Real Steel:
 //   p1 = ATOM: khung thép xám bạc gọn gàng, mắt xanh, ngực đen có đèn nhỏ.
@@ -21,6 +22,20 @@ const SPECS = {
 const THIGH = 0.5;
 const SHIN = 0.5;
 const ANKLE_Y = 0.1;
+
+const credits = new Set();
+function showCredit(text) {
+  if (!text || typeof document === 'undefined' || credits.has(text)) return;
+  credits.add(text);
+  let el = document.getElementById('model-credits');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'model-credits';
+    el.style.cssText = 'position:fixed;left:8px;bottom:6px;z-index:5;font:10px system-ui;color:#8896b3;opacity:.8;pointer-events:none;max-width:60vw';
+    document.body.appendChild(el);
+  }
+  el.append(Object.assign(document.createElement('div'), { textContent: text }));
+}
 
 export function createRobot(id) {
   const pal = PALETTES[id];
@@ -258,6 +273,15 @@ export function createRobot(id) {
         m.emissiveIntensity = m.userData.baseI * this.power + this.flash * 2.5;
       }
 
+      if (this.model) {
+        for (const m of this.model.materials) {
+          m.emissive.copy(this.flashColor);
+          m.emissiveIntensity = f * 1.2;
+        }
+        this.model.update(t);
+        return;
+      }
+
       // Gập hông/gối thì hông hạ xuống: hạ cả thân để chân nào thấp hơn vẫn chạm sàn
       let drop = 0;
       if (!this.ko) {
@@ -277,5 +301,19 @@ export function createRobot(id) {
 
   robot.targets.add(robot);
   robot.applyPose(BASE.idle);
+
+  // Model thật (nếu có): robot dựng bằng code ở trên thành bộ khớp ẩn, model đọc giá trị khớp đó.
+  // Tải lỗi hoặc thiếu xương thì giữ nguyên robot dựng bằng code.
+  const parts = { root, ground, bob, torso, head, arms, legs };
+  robot.ready = loadModel(id) // Promise: resolve khi model thật đã gắn xong (hoặc đã quyết định dùng robot dựng bằng code)
+    .then((scene) => {
+      const meshes = [];
+      root.traverse((o) => o.isMesh && o.visible && meshes.push(o));
+      const rig = buildModelRig(scene, parts, id);
+      meshes.forEach((m) => (m.visible = false));
+      robot.model = rig;
+      showCredit(CREDIT[id]);
+    })
+    .catch((err) => console.warn(`[render] ${id}: dùng robot dựng bằng code (${err.message})`));
   return robot;
 }
