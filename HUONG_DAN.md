@@ -216,8 +216,8 @@ Các đòn nối tiếp trong một combo của AI lấy đà ngắn hơn (kho�
 - [x] `server/index.js` gọi Claude để bình luận sau mỗi hiệp, `ai/commentary.js` có câu dự phòng **(đã có khung)**
 - [ ] Lấy API key, chạy `npm run server`, thử và chỉnh prompt bình luận cho hay hơn
 - [x] ZEUS lấy đà trước mỗi đòn, đánh combo, sát thương giảm theo độ khó **(đã có khung)**
-- [ ] Cân bằng `DIFF` trong `opponent.js` (`windupMs`, `damage`, `aggro`, `combo`) để Easy dễ thắng, Hard khó thật
-- [ ] *(Nếu kịp)* LLM làm huấn luyện viên cho ZEUS: giữa hiệp trả về JSON chiến thuật như `{"aggro":0.7,"favor":"hook"}` (xem llm-colosseum trong [REPOS.md](REPOS.md))
+- [x] Cân bằng `DIFF` trong `opponent.js` (`windupMs`, `damage`, `aggro`, `combo`) để Easy dễ thắng, Hard khó thật (đo bằng `node src/ai/dev/balance.mjs`)
+- [x] *(Nếu kịp)* LLM làm huấn luyện viên cho ZEUS: giữa hiệp trả về JSON chiến thuật (`src/ai/coach.js`, `POST /api/coach`; server lỗi thì dùng luật), xem llm-colosseum trong [REPOS.md](REPOS.md)
 - [ ] Slide pitch (5–6 slide), kịch bản demo, **quay video dự phòng** lúc 3:30
 
 ---

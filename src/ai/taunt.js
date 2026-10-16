@@ -58,7 +58,7 @@ export const interruptedLine = () => pick(LINES.interrupted);
 export const winLine = () => pick(LINES.win);
 export const loseLine = () => pick(LINES.lose);
 
-export function say(who, line) {
+export function say(who, line, icon = '🤖') {
   emit('TAUNT', { who, line });
   if (typeof document === 'undefined') return;
   if (!bubble) {
@@ -72,7 +72,7 @@ export function say(who, line) {
     });
     document.body.appendChild(bubble);
   }
-  bubble.textContent = `🤖 ${line}`;
+  bubble.textContent = `${icon} ${line}`;
   bubble.style.opacity = '1';
   clearTimeout(hideTimer);
   hideTimer = setTimeout(() => (bubble.style.opacity = '0'), SHOW_MS);

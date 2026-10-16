@@ -39,25 +39,27 @@ export const DIFF = {
   // aggro: xác suất ra đòn mỗi nhịp · cooldownMs: nghỉ giữa 2 lần ra đòn · stunMs: khựng khi trúng đòn
   // smartDodge: né đúng hướng · doubleSlip: né liên tiếp khi p1 ra 2 đòn · combo: xác suất jab-jab-hook
   // counter: xác suất phản đòn sau khi thủ/né · slipCounters: các kiểu phản đòn sau khi né
-  // guardUp: xác suất tự thủ/né khi chưa ra đòn
+  // guardUp: xác suất tự thủ/né khi chưa ra đòn · hookBias: xác suất đấm hook thay vì jab
   // windupMs: lấy đà (găng sáng cam) trước khi đấm, người chơi có windupMs + hitDelayMs để né/đỡ
   // damage: hệ số sát thương của ZEUS
   easy: {
-    react: 0.2, reactMs: 210, dodgeBias: 0.5, aggro: 0.3, cooldownMs: 1500, stunMs: 350,
+    react: 0.2, reactMs: 210, dodgeBias: 0.5, aggro: 0.3, cooldownMs: 1500, stunMs: 350, hookBias: 0.15,
     smartDodge: false, doubleSlip: false, combo: 0, counter: 0, slipCounters: [], guardUp: 0.12,
     windupMs: 750, damage: 0.5,
   },
   normal: {
-    react: 0.45, reactMs: 160, dodgeBias: 0.5, aggro: 0.4, cooldownMs: 1100, stunMs: 250,
-    smartDodge: false, doubleSlip: false, combo: 0.15, counter: 0.3, slipCounters: ['slipHook'], guardUp: 0.12,
-    windupMs: 550, damage: 0.7,
+    react: 0.62, reactMs: 160, dodgeBias: 0.5, aggro: 0.62, cooldownMs: 780, stunMs: 250, hookBias: 0.2,
+    smartDodge: false, doubleSlip: false, combo: 0.15, counter: 0.25, slipCounters: ['slipHook'], guardUp: 0.12,
+    windupMs: 360, damage: 1.0,
   },
   hard: {
-    react: 0.7, reactMs: 90, dodgeBias: 0.6, aggro: 0.7, cooldownMs: 600, stunMs: 120,
-    smartDodge: true, doubleSlip: true, combo: 0.35, counter: 0.6, slipCounters: ['slipHook', 'slipJabHook'], guardUp: 0.12,
-    windupMs: 420, damage: 0.9,
+    react: 0.86, reactMs: 90, dodgeBias: 0.6, aggro: 0.8, cooldownMs: 550, stunMs: 120, hookBias: 0.25,
+    smartDodge: true, doubleSlip: true, combo: 0.35, counter: 0.72, slipCounters: ['slipHook', 'slipJabHook'], guardUp: 0.12,
+    windupMs: 280, damage: 1.0,
   },
 };
+
+const LOW_HP = 30; // dưới mức máu này ZEUS thủ nhiều hơn, đánh ít hơn
 
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const between = (a, b) => a + Math.random() * (b - a);
@@ -65,6 +67,8 @@ const power = () => 0.5 + Math.random() * 0.5;
 
 let cfg = DIFF.normal;
 let diffName = 'normal';
+let testOverrides = {}; // chỉnh tạm cho kịch bản test
+let tactics = {}; // chiến thuật huấn luyện viên đặt giữa các hiệp (xem applyTactics)
 let debug = false;
 let active = false;
 let started = false;
@@ -192,21 +196,23 @@ function cancelTaunt() {
 }
 
 const p1GuardingLong = () => p1.guard && Date.now() - p1.guardSince > 1000;
+const lowHp = () => hp.p2 < LOW_HP;
 
 function defaultPlan() {
   if (Math.random() < cfg.combo) {
     const lead = rand(['L', 'R']);
     return [[0, lead, 'jab'], [GAP, flip(lead), 'jab'], [2 * GAP, lead, 'hook']]; // jab - jab - hook
   }
-  const kind = p1GuardingLong() ? (Math.random() < 0.8 ? 'hook' : 'jab') : Math.random() < 0.2 ? 'hook' : 'jab';
+  const kind = p1GuardingLong() ? (Math.random() < 0.8 ? 'hook' : 'jab') : Math.random() < cfg.hookBias ? 'hook' : 'jab';
   return [[0, rand(['L', 'R']), kind]];
 }
 
-function startAttack(plan = defaultPlan()) {
+// quick: phản đòn sau khi thủ/né lấy đà ngắn ngay từ cú đầu (giống đòn nối trong combo)
+function startAttack(plan = defaultPlan(), { quick = false } = {}) {
   releaseDefense();
   const now = Date.now();
   queue = plan.map(([dt, hand, kind]) => ({ at: now + dt, hand, kind }));
-  chain = false;
+  chain = quick;
   enter('ATTACK');
   firePunches(now); // cú đầu ra ngay, không chờ tick sau (nếu chờ thì khoảng cách tới cú sau bị ngắn lại)
 }
@@ -313,9 +319,10 @@ function tick() {
       const ready = now - lastAttack >= cfg.cooldownMs;
       // p1 thủ lâu thì AI hăng hơn để phá thủ bằng hook; p1 vừa đấm xong (tay đang duỗi) là lúc phản đòn
       const opening = now - p1.lastPunch < 500;
-      const aggro = Math.min(1, cfg.aggro + (p1GuardingLong() ? 0.25 : 0) + (opening ? 0.2 : 0));
+      let aggro = Math.min(1, cfg.aggro + (p1GuardingLong() ? 0.25 : 0) + (opening ? 0.2 : 0));
+      if (lowHp()) aggro *= 0.7; // máu thấp thì bớt liều
       if (ready && Math.random() < aggro) startAttack();
-      else if (Math.random() < cfg.guardUp) defend(null); // thỉnh thoảng thủ chủ động
+      else if (Math.random() < cfg.guardUp + (lowHp() ? 0.1 : 0)) defend(null); // thỉnh thoảng thủ chủ động
       else enter('APPROACH', between(150, 350)); // chưa ra đòn thì nhử thêm một nhịp
       break;
     }
@@ -335,7 +342,7 @@ function tick() {
         if (c) {
           lastCounter = { name: c.name, at: now };
           log('counter', c.name);
-          startAttack(c.plan);
+          startAttack(c.plan, { quick: true });
         } else enter('RECOVER', 150);
       }
       break;
@@ -346,14 +353,14 @@ function tick() {
   }
 }
 
-function onP1Punch({ hand }) {
+// Chỉ gọi cho cú đấm game đã nhận (game.js phát ANIM jab_/hook_), không phản ứng với cú bị game bỏ qua
+function onP1Punch(hand) {
   p1.lastPunch = Date.now();
   p1.pendingUntil = p1.lastPunch + HIT_DELAY_MS + 50;
-  cancelTaunt(); // p1 đấm lúc đang khiêu khích thì thôi diễn, vào trận luôn
   if (!active || reactTimer) return;
   if (state === 'GUARD') return;
   if (state === 'DODGE' && !cfg.doubleSlip) return;
-  if (Math.random() >= cfg.react) return;
+  if (Math.random() >= cfg.react + (lowHp() ? 0.1 : 0)) return;
   const delay = Math.min(cfg.reactMs, HIT_DELAY_MS - 30);
   reactTimer = setTimeout(() => {
     reactTimer = null;
@@ -375,14 +382,38 @@ function reset() {
   enter('IDLE');
 }
 
+function rebuildCfg() {
+  cfg = { ...DIFF[diffName], ...tactics, ...testOverrides };
+  setDamageScale(ME, cfg.damage);
+}
+
 // overrides: chỉnh tạm vài thông số (dùng cho kịch bản test), ví dụ { react: 1, dodgeBias: 1 }
+// Đổi độ khó thì bỏ chiến thuật huấn luyện viên đã đặt.
 export function setDifficulty(name, overrides = {}) {
   if (!DIFF[name]) return;
   diffName = name;
-  cfg = { ...DIFF[name], ...overrides };
-  setDamageScale(ME, cfg.damage);
+  testOverrides = overrides;
+  tactics = {};
+  rebuildCfg();
   log('difficulty', name, overrides);
 }
+
+// Chiến thuật từ huấn luyện viên (src/ai/coach.js), luôn giữ trong giới hạn của mức khó hiện tại:
+//   aggro: 'up' | 'same' | 'down'   ·   favor: 'jab' | 'hook' | 'mixed'   ·   defense: 'guard' | 'dodge' | 'balanced'
+export function applyTactics({ aggro = 'same', favor = 'mixed', defense = 'balanced' } = {}) {
+  const base = DIFF[diffName];
+  const clamp = (v) => Math.min(0.95, Math.max(0.05, v));
+  tactics = {
+    aggro: clamp(base.aggro + (aggro === 'up' ? 0.15 : aggro === 'down' ? -0.15 : 0)),
+    hookBias: favor === 'hook' ? 0.5 : favor === 'jab' ? 0.1 : base.hookBias,
+    dodgeBias: defense === 'dodge' ? 0.7 : defense === 'guard' ? 0.3 : base.dodgeBias,
+  };
+  rebuildCfg();
+  log('tactics', { aggro, favor, defense }, tactics);
+  return tactics;
+}
+
+export const getTactics = () => tactics;
 
 export function setDodgeMap(name) {
   if (!DODGE_MAPS[name]) return;
@@ -403,7 +434,12 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt
   if (started) return;
   started = true;
 
-  on('PUNCH', (e) => e.who === 'p1' && onP1Punch(e));
+  // p1 bấm đấm lúc đang đếm ngược (game không nhận) vẫn làm ZEUS bỏ dở màn khiêu khích
+  on('PUNCH', (e) => e.who === 'p1' && cancelTaunt());
+  on('ANIM', ({ who, name }) => {
+    const m = who === 'p1' && /^(jab|hook)_([LR])$/.exec(name);
+    if (m) onP1Punch(m[2]);
+  });
   on('GUARD', (e) => {
     if (e.who !== 'p1') return;
     if (e.on && !p1.guard) p1.guardSince = Date.now();
@@ -432,6 +468,10 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt
     if (s === 'countdown') {
       active = false;
       reset();
+      if (round === 1 && Object.keys(tactics).length) {
+        tactics = {}; // trận mới: bỏ chiến thuật của trận trước
+        rebuildCfg();
+      }
       if (tauntEnabled) startTaunt(); // khiêu khích trong lúc đếm ngược
     } else if (s === 'fight' || s === 'start') {
       const taunting = state === 'TAUNT';
