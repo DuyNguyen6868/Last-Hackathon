@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reel Steel</title>
+  </head>
+  <body>
+    <!-- Đấu trường 3D (Thành) -->
+    <div id="arena"></div>
+
+    <!-- HUD (Duy) -->
+    <div id="hud">
+      <div class="bar-wrap p1">
+        <div class="name">ATOM <small>(Bạn)</small></div>
+        <div class="bar"><div class="fill" id="hp-p1"></div></div>
+        <div class="wins" id="wins-p1"></div>
+      </div>
+      <div class="center">
+        <div id="round-label">ROUND 1</div>
+        <div id="timer">60</div>
+      </div>
+      <div class="bar-wrap p2">
+        <div class="name">ZEUS <small>(AI)</small></div>
+        <div class="bar"><div class="fill" id="hp-p2"></div></div>
+        <div class="wins" id="wins-p2"></div>
+      </div>
+    </div>
+    <div id="banner"></div>
+    <div id="commentary" class="hidden"></div>
+
+    <!-- Webcam preview (Chiến) -->
+    <div id="cam" class="hidden">
+      <video id="cam-video" playsinline muted></video>
+      <canvas id="cam-canvas"></canvas>
+      <pre id="cam-debug"></pre>
+    </div>
+
+    <!-- Menu -->
+    <div id="menu">
+      <h1>REEL <span>STEEL</span></h1>
+      <p class="tag">Đấm trước webcam, robot của bạn đấm theo.</p>
+      <label>Độ khó đối thủ
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+      <div class="buttons">
+        <button id="btn-cam">📷 Bật webcam</button>
+        <button id="btn-start" class="primary">🥊 Bắt đầu trận</button>
+      </div>
+      <p id="cam-status">Webcam chưa bật, đang dùng bàn phím.</p>
+      <div class="keys">
+        <b>Bàn phím:</b> J/K jab trái/phải · U/I hook trái/phải · giữ L để đỡ · giữ A/D để né
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
