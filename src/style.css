@@ -40,6 +40,25 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 }
 #banner.show { opacity: 1; }
 
+/* Popup combo / né / đỡ ở hai bên màn hình */
+.pop {
+  position: fixed; top: 110px; max-width: 45%;
+  font-size: clamp(20px, 3.4vw, 40px); font-weight: 900; letter-spacing: 0.04em;
+  text-shadow: 0 3px 0 #000, 0 0 18px currentColor;
+  pointer-events: none; opacity: 0; transform: scale(0.6);
+  transition: opacity 0.15s, transform 0.15s;
+}
+.pop.p1 { left: 16px; color: #66e0ff; }
+.pop.p2 { right: 16px; text-align: right; color: #ff6b6b; }
+.pop.show { opacity: 1; transform: scale(1); }
+.pop.combo { color: #ffd23f; }
+.pop small { display: block; font-size: 0.5em; color: var(--text); }
+.warn { color: #ff8a00; font-weight: 700; }
+.combos { border-collapse: collapse; font-size: 13px; color: var(--muted); }
+.combos th, .combos td { padding: 3px 10px; border-bottom: 1px solid #263045; text-align: left; }
+.combos th { color: var(--text); }
+.combos td:first-child { color: #ffd23f; font-weight: 700; }
+
 #commentary {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   max-width: min(720px, calc(100% - 32px)); padding: 12px 18px;
@@ -55,7 +74,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 
 /* Menu */
 #menu {
-  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center;
+  overflow-y: auto;
   gap: 14px; background: radial-gradient(ellipse at center, rgba(10,14,22,0.75), rgba(0,0,0,0.95));
   padding: 16px; text-align: center;
 }

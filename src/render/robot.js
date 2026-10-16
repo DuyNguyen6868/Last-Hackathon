@@ -102,8 +102,19 @@ export function createRobot(id) {
     fist.position.y = -0.5;
     elbow.add(fist);
     box(0.42, 0.42, 0.46, body, 0, -0.1, 0.02, fist);
-    box(0.44, 0.08, 0.1, glowMat, 0, -0.04, 0.24, fist);
-    arms[side] = { shoulder, elbow };
+    const fistGlow = glow(); // material riêng để găng sáng cam khi lấy đà
+    box(0.44, 0.08, 0.1, fistGlow, 0, -0.04, 0.24, fist);
+    // Lớp vỏ phát sáng quanh găng, chỉ hiện khi lấy đà
+    const shell = new THREE.Mesh(
+      new THREE.BoxGeometry(0.56, 0.56, 0.6),
+      new THREE.MeshBasicMaterial({
+        color: 0xff8a00, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
+      }),
+    );
+    shell.position.set(0, -0.1, 0.02);
+    shell.visible = false;
+    fist.add(shell);
+    arms[side] = { shoulder, elbow, fistGlow, shell };
   }
 
   const channels = {
@@ -116,6 +127,7 @@ export function createRobot(id) {
   };
 
   const glowBase = new THREE.Color(pal.glow);
+  const chargeColor = new THREE.Color(0xff8a00);
   const phase = id === 'p1' ? 0 : 1.7;
 
   const robot = {
@@ -128,6 +140,7 @@ export function createRobot(id) {
     power: 1,       // độ sáng đèn (0 khi KO)
     flash: 0,       // nháy khi trúng đòn
     flashColor: new THREE.Color(0xff2a3d),
+    charge: { L: null, R: null }, // lấy đà: { t0, dur } theo từng tay
     channels,
     // Các object mà tween có thể đang điều khiển, để huỷ khi reset
     targets: new Set(Object.values(channels).map((c) => c[0])),
@@ -146,7 +159,19 @@ export function createRobot(id) {
       this.ko = false;
       this.power = 1;
       this.flash = 0;
+      this.clearCharge();
       this.applyPose(BASE.idle);
+    },
+
+    telegraph(side, ms, now) {
+      this.charge[side] = { t0: now, dur: ms };
+    },
+
+    clearCharge(side) {
+      for (const s of side ? [side] : ['L', 'R']) {
+        this.charge[s] = null;
+        arms[s].shell.visible = false;
+      }
     },
 
     update(dt, t) {
@@ -155,6 +180,22 @@ export function createRobot(id) {
       for (const m of glowMats) {
         m.emissive.copy(glowBase).lerp(this.flashColor, f);
         m.emissiveIntensity = m.userData.baseI * this.power + this.flash * 2.5;
+      }
+      // Găng sáng cam và nhấp nháy nhanh dần khi lấy đà
+      for (const s of ['L', 'R']) {
+        const c = this.charge[s];
+        if (!c) continue;
+        const p = (t - c.t0) / c.dur;
+        if (p > 1.4) {
+          this.clearCharge(s);
+          continue;
+        }
+        const level = Math.min(1, p);
+        const pulse = 0.65 + 0.35 * Math.sin(t * (0.02 + level * 0.05));
+        arms[s].fistGlow.emissive.copy(chargeColor);
+        arms[s].fistGlow.emissiveIntensity = 2 + 4 * level * pulse;
+        arms[s].shell.visible = true;
+        arms[s].shell.material.opacity = (0.12 + 0.4 * level) * pulse;
       }
       bob.position.y = this.ko ? 0 : Math.abs(Math.sin(t * 0.0032 + phase)) * 0.035;
     },

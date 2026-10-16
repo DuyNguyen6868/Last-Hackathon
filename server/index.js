@@ -38,7 +38,7 @@ app.post('/api/commentary', async (req, res) => {
 Người thắng: ${winner ?? 'hoà'}
 Tỉ số hiệp: ATOM ${wins?.p1 ?? 0} - ${wins?.p2 ?? 0} ZEUS
 Số liệu: ${JSON.stringify(stats)}
-(thrown = số đòn tung ra, landed = trúng, blocked = bị đỡ, missed = bị né, hp = máu còn lại /100)`,
+(thrown = số đòn tung ra, landed = trúng, blocked = bị đỡ, missed = bị né, combos = số combo trúng, counters = số lần phản đòn thành công, hp = máu còn lại /100)`,
         },
       ],
     });
