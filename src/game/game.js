@@ -10,6 +10,8 @@ const newFighter = () => ({
   guardSince: 0,
   dodge: null,
   dodgeSince: 0,
+  dodgeStart: -Infinity, // lần gần nhất bắt đầu né (không đổi khi thả né)
+  windupAt: -Infinity, // lần gần nhất lấy đà (TELEGRAPH)
   lastPunch: -Infinity,
   stunnedUntil: 0,
   seq: [], // chuỗi đòn gần nhất để nhận combo: { kind, hand, t, result }
@@ -125,8 +127,11 @@ function resolveHit(who, entry, power) {
   const now = performance.now();
   const { kind } = entry;
 
-  // Bị né: đứt chuỗi combo, người né được quyền phản đòn
-  if (target.dodge && now - target.dodgeSince < CONFIG.dodgeWindowMs) {
+  // Bị né: đang né, hoặc đã bấm né (kể cả bấm nhả nhanh) sau khi đối thủ bắt đầu lấy đà cú này.
+  // Né đứt chuỗi combo, người né được quyền phản đòn
+  const holding = target.dodge && now - target.dodgeSince < CONFIG.dodgeWindowMs;
+  const tapped = target.dodgeStart >= entry.windupAt && now - target.dodgeStart < CONFIG.dodgeWindowMs;
+  if (holding || tapped) {
     entry.result = 'missed';
     me.seq = [];
     me.stats.missed++;
@@ -190,7 +195,9 @@ on('PUNCH', ({ who, hand, kind, power = 0.7 }) => {
   // Ghi vào chuỗi combo. Nghỉ quá lâu giữa hai đòn thì bắt đầu chuỗi mới
   const last = me.seq[me.seq.length - 1];
   if (last && now - last.t > CONFIG.comboGapMs) me.seq = [];
-  const entry = { kind, hand, t: now, result: null };
+  // Cú có lấy đà ngay trước đó (AI) thì tính né từ lúc lấy đà, không thì từ lúc ra đòn
+  const windupAt = now - me.windupAt < 1500 ? me.windupAt : now;
+  const entry = { kind, hand, t: now, windupAt, result: null };
   me.seq.push(entry);
   if (me.seq.length > 4) me.seq.shift();
 
@@ -206,10 +213,15 @@ on('GUARD', ({ who, on: isOn }) => {
   emit('ANIM', { who, name: isOn ? 'guard' : 'idle' });
 });
 
+on('TELEGRAPH', ({ who }) => {
+  game.f[who].windupAt = performance.now();
+});
+
 on('DODGE', ({ who, dir }) => {
   const me = game.f[who];
   if (me.dodge === dir) return;
   me.dodge = dir;
   me.dodgeSince = performance.now();
+  if (dir) me.dodgeStart = me.dodgeSince;
   emit('ANIM', { who, name: dir ? `dodge_${dir}` : 'idle' });
 });

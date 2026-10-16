@@ -168,7 +168,7 @@ Combo yêu cầu đổi tay luân phiên, mỗi đòn cách nhau tối đa 0.9 g
 
 ### Đối thủ AI: lấy đà và hệ số sát thương
 
-Trước mỗi cú đấm, ZEUS phát `TELEGRAPH` rồi chờ `windupMs` mới phát `PUNCH`. Thời gian người chơi có để phản ứng là `windupMs + hitDelayMs`. Cửa sổ né `dodgeWindowMs` (1000ms) phải dài hơn khoảng này.
+Trước mỗi cú đấm, ZEUS phát `TELEGRAPH` rồi chờ `windupMs` mới phát `PUNCH`. Thời gian người chơi có để phản ứng là `windupMs + hitDelayMs`. Bấm né nhanh rồi thả cũng tính, miễn là bấm sau khi ZEUS bắt đầu lấy đà cú đó (mỗi cú cần né riêng). Cửa sổ né `dodgeWindowMs` (1000ms) phải dài hơn `windupMs + hitDelayMs`.
 
 | Độ khó | windupMs | Hệ số sát thương | Combo dài nhất |
 |---|---|---|---|
@@ -187,7 +187,7 @@ Các đòn nối tiếp trong một combo của AI lấy đà ngắn hơn (kho�
 ### 👑 Duy: trưởng nhóm, ghép code và logic game
 - [x] Khung dự án, `events.js`, `keyboard.js`, `main.js` **(đã có khung)**
 - [x] Game state: máu, 3 hiệp × 60 giây, KO, thắng theo số hiệp **(đã có khung)**
-- [x] Luật trúng đòn: đòn mất 250ms mới chạm, đỡ thì sát thương ×0.2, né trong 1000ms đầu thì trượt, bị trúng thì choáng 220ms **(đã có khung)**
+- [x] Luật trúng đòn: đòn mất 250ms mới chạm, đỡ thì sát thương ×0.2, né (giữ hoặc bấm nhanh sau khi đối thủ lấy đà) trong 1000ms thì trượt, bị trúng thì choáng 220ms **(đã có khung)**
 - [x] Combo (ONE-TWO, HAMMER, TRIPLE THREAT, STEEL STORM), phản đòn ×1.5, popup NÉ!/ĐỠ!/combo trên HUD **(đã có khung)**
 - [x] HUD: thanh máu, đồng hồ, cúp thắng hiệp, banner ROUND / FIGHT! / K.O. **(đã có khung)**
 - [ ] Chơi thử nhiều lần và cân bằng các số trong `config.js` (sát thương, thời gian hiệp)
@@ -215,7 +215,7 @@ Các đòn nối tiếp trong một combo của AI lấy đà ngắn hơn (kho�
 - [x] `server/index.js` gọi Claude để bình luận sau mỗi hiệp, `ai/commentary.js` có câu dự phòng **(đã có khung)**
 - [ ] Lấy API key, chạy `npm run server`, thử và chỉnh prompt bình luận cho hay hơn
 - [x] ZEUS lấy đà trước mỗi đòn, đánh combo, sát thương giảm theo độ khó **(đã có khung)**
-- [ ] Cân bằng `DIFFICULTY` trong `opponent.js` (`windupMs`, `damage`, `combo`) để Easy dễ thắng, Hard khó thật
+- [ ] Cân bằng `DIFF` trong `opponent.js` (`windupMs`, `damage`, `aggro`, `combo`) để Easy dễ thắng, Hard khó thật
 - [ ] *(Nếu kịp)* LLM làm huấn luyện viên cho ZEUS: giữa hiệp trả về JSON chiến thuật như `{"aggro":0.7,"favor":"hook"}` (xem llm-colosseum trong [REPOS.md](REPOS.md))
 - [ ] Slide pitch (5–6 slide), kịch bản demo, **quay video dự phòng** lúc 3:30
 

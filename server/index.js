@@ -1,70 +1,56 @@
-// Proxy gọi Claude (Tiến Anh). Giữ API key ở server, frontend chỉ gọi /api/commentary.
-// Chạy: npm run server  (cần file .env, xem .env.example)
+// Proxy nhỏ gọi Claude để bình luận giữa hiệp. API key chỉ nằm trong server/.env.
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: '32kb' }));
-
-const client = new Anthropic(); // đọc ANTHROPIC_API_KEY từ môi trường
-const MODEL = process.env.CLAUDE_MODEL || 'claude-opus-5-5';
-// Fallback phía server khi model từ chối trả lời: chỉ dùng với các model hỗ trợ
+const PORT = process.env.PORT || 8787;
+// Chọn model bằng CLAUDE_MODEL trong .env (xem .env.example), không đặt thì dùng Haiku cho nhanh
+const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-5-5';
+// Fallback phía server khi model từ chối trả lời: chỉ các model này hỗ trợ
 const SUPPORTS_FALLBACK = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1'].includes(MODEL);
 
-const SYSTEM = `Bạn là bình luận viên đấm bốc robot trong giải "Reel Steel", giọng hào hứng như truyền hình thể thao.
-Robot của người chơi tên ATOM (p1, màu xanh), robot AI tên ZEUS (p2, màu đỏ).
-Dựa trên số liệu hiệp đấu, viết đúng 1–2 câu tiếng Việt, tổng dưới 40 từ.
-Nhắc tới ít nhất một con số cụ thể (số đòn trúng, máu còn lại...). Kết thúc bằng một lời khuyên chiến thuật ngắn cho ATOM nếu ATOM đang thua.
-Chỉ trả về câu bình luận, không thêm tiêu đề hay ký hiệu.`;
+const SYSTEM = `Bạn là bình luận viên quyền anh robot trên truyền hình, giọng hào hứng, kịch tính.
+Trận đấu: người chơi thật (p1, robot XANH) điều khiển bằng cách đấm trước webcam, đấu với robot ĐỎ do AI điều khiển (p2).
+Nhận số liệu của hiệp vừa xong, viết đúng 1–2 câu bình luận tiếng Việt, tối đa 40 từ.
+Nhắc tới con số nổi bật nhất (số đòn trúng, máu còn lại...). Không dùng markdown, không dùng dấu ngoặc kép, chỉ trả về câu bình luận.`;
 
-app.post('/api/commentary', async (req, res) => {
-  const { state, winner, stats, wins } = req.body ?? {};
-  if (!stats) return res.status(400).json({ error: 'missing stats' });
+const client = new Anthropic();
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '16kb' }));
 
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+app.post('/commentary', async (req, res) => {
+  const { round, kind, winner, difficulty, hp, stats } = req.body ?? {};
+  const summary = JSON.stringify({ round, kind, winner, difficulty, hp, stats });
   try {
-    const response = await client.beta.messages.create({
-      model: MODEL,
-      max_tokens: 2000,
-      output_config: { effort: 'low' },
-      ...(SUPPORTS_FALLBACK && { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }),
-      system: SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content: `Sự kiện: ${state === 'ko' ? 'KNOCKOUT' : state === 'over' ? 'KẾT THÚC TRẬN' : 'HẾT HIỆP'}
-Người thắng: ${winner ?? 'hoà'}
-Tỉ số hiệp: ATOM ${wins?.p1 ?? 0} - ${wins?.p2 ?? 0} ZEUS
-Số liệu: ${JSON.stringify(stats)}
-(thrown = số đòn tung ra, landed = trúng, blocked = bị đỡ, missed = bị né, combos = số combo trúng, counters = số lần phản đòn thành công, hp = máu còn lại /100)`,
-        },
-      ],
-    });
-
-    if (response.stop_reason === 'refusal') {
-      return res.status(502).json({ error: 'refusal' });
-    }
-    const text = response.content
+    const msg = await (SUPPORTS_FALLBACK ? client.beta.messages : client.messages).create(
+      {
+        model: MODEL,
+        ...(SUPPORTS_FALLBACK && { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }),
+        max_tokens: 1024,
+        output_config: { effort: 'low' },
+        system: SYSTEM,
+        messages: [{ role: 'user', content: `Số liệu hiệp (kind="ko" nghĩa là vừa có K.O.):\n${summary}` }],
+      },
+      { timeout: 8000, maxRetries: 0 },
+    );
+    if (msg.stop_reason === 'refusal') throw new Error('refusal');
+    const text = msg.content
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
       .join(' ')
       .trim();
+    if (!text) throw new Error('empty response');
     res.json({ text });
-  } catch (error) {
-    if (error instanceof Anthropic.AuthenticationError) {
-      console.error('Sai hoặc thiếu ANTHROPIC_API_KEY');
-    } else if (error instanceof Anthropic.RateLimitError) {
-      console.error('Bị giới hạn tốc độ, thử lại sau');
-    } else if (error instanceof Anthropic.APIError) {
-      console.error(`Lỗi API ${error.status}:`, error.message);
-    } else {
-      console.error(error);
-    }
-    res.status(502).json({ error: 'llm_failed' });
+  } catch (err) {
+    if (err instanceof Anthropic.APIConnectionError) console.error('[commentary] không kết nối được API:', err.message);
+    else if (err instanceof Anthropic.APIError) console.error(`[commentary] API lỗi ${err.status}:`, err.message);
+    else console.error('[commentary]', err.message);
+    res.status(502).json({ error: 'commentary unavailable' });
   }
 });
 
-const port = Number(process.env.PORT) || 8787;
-app.listen(port, () => console.log(`Commentary server: http://localhost:${port} (model ${MODEL})`));
+app.listen(PORT, () => console.log(`Commentary proxy: http://localhost:${PORT} (model ${MODEL})`));
