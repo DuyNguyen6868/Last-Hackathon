@@ -52,3 +52,27 @@ Chỉnh nhanh: tư thế/đòn đánh trong `poses.js` và `anim.js`; màu robot
 
 `npm run dev` rồi mở `http://localhost:5173/src/render/pose-sheet.html?who=p1` (hoặc `who=p2`, thêm `&view=side` hoặc `view=front`).
 Trang tua animation theo bước thời gian cố định và vẽ 10 tư thế (idle, guard, jab, hook, né, trúng đòn, KO) thành một bảng, nên chỉnh `poses.js` / `anim.js` xong chỉ cần tải lại để xem.
+
+## Robot dùng model .glb (Atom, Twin Cities, hoặc model khác)
+
+Thứ tự ưu tiên khi chọn hình cho mỗi robot:
+1. **`glbRig.js` (chuyên biệt)**: p1 = `public/models/atom.glb` (Atom, có sẵn xương), p2 = `public/models/twin_cities.glb`
+   (không có xương, code tự tách mảnh trái/phải và dựng xương). Đọc giá trị khớp của robot hình khối (kể cả hông/gối/cột sống)
+   nên bước chân, gập gối, ngã KO đều chạy. Model gắn credit CC BY 4.0 ở góc trái dưới màn hình.
+2. **`robot-glb.js` (tổng quát)**: nếu bước 1 không dùng được, thử `public/models/zeus.glb` và các model khác có xương kiểu
+   Mixamo/Unreal (chỉ tay, đầu, xoay thân; chưa có chân).
+3. Robot hình khối (dự phòng cuối).
+
+Phần tổng quát (`robot-glb.js`):
+
+Đặt `public/models/atom.glb` (p1) và `public/models/zeus.glb` (p2). Có file thì `robot-glb.js` tự thay robot
+hình khối, không có hoặc tải lỗi thì giữ robot hình khối (xem log `[render] ...` trong console).
+
+Yêu cầu model: có xương (Mixamo/Unreal/Blender đều được), đứng T-pose hoặc A-pose, nhìn về +z, dưới ~5MB và ~30k tam giác.
+Loader tự dò xương theo tên (`LeftArm`, `LeftForeArm`, `LeftHand`, `Head`...) và tự tính hướng xoay từng khớp,
+nên không cần chỉnh dấu/trục theo từng model.
+
+Chỉnh cho từng model trong `GLB_MODELS` (`robot-glb.js`): `height`, `yaw` (nếu model nhìn ngược), `bones` (ghi đè tên xương).
+Debug trong console: `robots.p1.missing` (khớp không dò ra xương), `robots.p1.bones` (xương đã dò).
+Model không có xương: chỉ có chuyển động cả thân (lao tới, né, ngã), tay không cử động.
+Tắt thử tải: `initRender({ bus, glb: false })`.
