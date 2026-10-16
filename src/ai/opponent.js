@@ -1,6 +1,7 @@
-// Đối thủ AI (p2): máy trạng thái IDLE → APPROACH → ATTACK / GUARD / DODGE → RECOVER.
+// Đối thủ AI (p2): máy trạng thái TAUNT (đầu hiệp) → IDLE → APPROACH → ATTACK / GUARD / DODGE → RECOVER.
 // Chỉ giao tiếp qua event bus: nghe hành động của p1, phát PUNCH / GUARD / DODGE cho p2.
 import { on, emit } from '../events.js';
+import { tauntLine, interruptedLine, say } from './taunt.js';
 
 const ME = 'p2';
 const TICK_MS = 100;
@@ -37,6 +38,10 @@ let queue = []; // các cú đấm combo đang chờ: { at, hand, kind }
 let reactTimer = null;
 let guarding = false;
 let dodging = null;
+let script = []; // các bước khiêu khích đang chờ: { at, act }
+let round = 1;
+let hp = { p1: 100, p2: 100 };
+let tauntEnabled = true;
 
 const p1 = { guard: false, guardSince: 0, dodge: null, lastPunch: 0 };
 
@@ -68,6 +73,31 @@ function releaseDefense() {
 function punch(hand, kind) {
   emit('PUNCH', { who: ME, hand, kind, power: power() });
   lastAttack = Date.now();
+}
+
+// Khiêu khích chỉ dùng GUARD / DODGE (không đấm) nên render và game không cần sửa gì.
+const TAUNTS = [
+  // lắc lư né trái phải
+  [[0, () => setDodge('L')], [300, () => setDodge('R')], [600, () => setDodge('L')], [900, () => setDodge(null)]],
+  // gõ găng hai lần
+  [[0, () => setGuard(true)], [250, () => setGuard(false)], [500, () => setGuard(true)], [750, () => setGuard(false)]],
+  // nhún né rồi giơ găng thách thức
+  [[0, () => setDodge('R')], [350, () => setDodge(null)], [500, () => setGuard(true)], [1000, () => setGuard(false)]],
+];
+
+function startTaunt() {
+  const now = Date.now();
+  script = rand(TAUNTS).map(([dt, act]) => ({ at: now + dt, act }));
+  say(ME, tauntLine({ round, hp }));
+  enter('TAUNT');
+}
+
+function cancelTaunt() {
+  if (state !== 'TAUNT') return;
+  script = [];
+  releaseDefense();
+  say(ME, interruptedLine());
+  enter('IDLE');
 }
 
 const p1GuardingLong = () => p1.guard && Date.now() - p1.guardSince > 1000;
@@ -111,6 +141,14 @@ function tick() {
   const done = now >= stateUntil;
 
   switch (state) {
+    case 'TAUNT':
+      while (script.length && script[0].at <= now) script.shift().act();
+      if (!script.length) {
+        releaseDefense();
+        enter('RECOVER', 300);
+      }
+      break;
+
     case 'IDLE':
       enter('APPROACH', between(200, 600));
       break;
@@ -153,6 +191,7 @@ function tick() {
 function onP1Punch({ hand }) {
   p1.lastPunch = Date.now();
   if (!active || reactTimer) return;
+  cancelTaunt(); // p1 đấm lúc đang khiêu khích thì thôi diễn, vào trận luôn
   if (state === 'GUARD' || state === 'DODGE') return;
   if (Math.random() >= cfg.react) return;
   const delay = Math.min(cfg.reactMs, HIT_DELAY_MS - 30);
@@ -166,6 +205,7 @@ function reset() {
   clearTimeout(reactTimer);
   reactTimer = null;
   queue = [];
+  script = [];
   stunUntil = 0;
   releaseDefense();
   enter('IDLE');
@@ -181,9 +221,10 @@ export function setDifficulty(name) {
 export const getDifficulty = () => diffName;
 export const getState = () => state;
 
-export function startOpponent({ difficulty = 'normal', debug: dbg = false } = {}) {
+export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt = true } = {}) {
   setDifficulty(difficulty);
   debug = dbg;
+  tauntEnabled = taunt;
   if (started) return;
   started = true;
 
@@ -202,11 +243,14 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false } = {}
       if (state === 'ATTACK') enter('RECOVER', 0);
     }
   });
-  on('ROUND', ({ state: s }) => {
+  on('HP', (v) => (hp = v));
+  on('ROUND', ({ round: r, state: s }) => {
     if (s === 'start') {
+      if (r) round = r;
       active = true;
       reset();
       lastAttack = Date.now(); // cho người chơi một nhịp trước cú đầu tiên
+      if (tauntEnabled) startTaunt();
     } else if (s === 'end' || s === 'ko') {
       active = false;
       reset();

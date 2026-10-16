@@ -1,0 +1,64 @@
+// Robot đỏ khiêu khích lúc đầu hiệp: chọn câu theo bối cảnh và hiện bong bóng thoại riêng.
+// Cũng phát TAUNT { who, line } để HUD/render dùng nếu muốn.
+import { emit } from '../events.js';
+
+const SHOW_MS = 2500;
+
+const LINES = {
+  first: [
+    'Lại đây nào, con người!',
+    'Webcam bật chưa đấy? Tôi chưa thấy cú đấm nào cả!',
+    'Tôi được train cả triệu hiệp rồi. Còn bạn?',
+    'Đấm thử xem, tôi đứng yên cho!',
+  ],
+  ahead: [
+    'Vẫn còn đứng được à? Bất ngờ đấy!',
+    'Hiệp này kết thúc nhanh thôi.',
+    'Thêm vài cú nữa là xong, chuẩn bị nằm sàn nhé!',
+  ],
+  behind: [
+    'Vừa rồi chỉ là khởi động thôi.',
+    'Giờ mới bắt đầu nghiêm túc!',
+    'Hết pin dự phòng rồi, giờ dùng pin chính!',
+  ],
+  even: [
+    'Ngang tài ngang sức à? Để xem hiệp này!',
+    'Không tệ… với một con người.',
+  ],
+  interrupted: ['Ê! Chưa nói xong mà!', 'Chơi xấu thế!', 'Đánh lén à?!'],
+};
+
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+let bubble = null;
+let hideTimer = null;
+
+export function tauntLine({ round, hp }) {
+  if (!round || round <= 1) return pick(LINES.first);
+  const lead = hp.p2 - hp.p1;
+  if (lead > 10) return pick(LINES.ahead);
+  if (lead < -10) return pick(LINES.behind);
+  return pick(LINES.even);
+}
+
+export const interruptedLine = () => pick(LINES.interrupted);
+
+export function say(who, line) {
+  emit('TAUNT', { who, line });
+  if (typeof document === 'undefined') return;
+  if (!bubble) {
+    bubble = document.createElement('div');
+    Object.assign(bubble.style, {
+      position: 'fixed', left: '50%', top: '16%', transform: 'translateX(-50%)',
+      maxWidth: 'min(520px, 85vw)', padding: '10px 18px', borderRadius: '16px',
+      background: 'rgba(40, 6, 6, 0.85)', color: '#fff', border: '2px solid #ff3b3b',
+      font: '700 22px/1.35 system-ui, sans-serif', textAlign: 'center', zIndex: 1000,
+      pointerEvents: 'none', transition: 'opacity 0.25s', opacity: '0',
+    });
+    document.body.appendChild(bubble);
+  }
+  bubble.textContent = `🤖 ${line}`;
+  bubble.style.opacity = '1';
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => (bubble.style.opacity = '0'), SHOW_MS);
+}
