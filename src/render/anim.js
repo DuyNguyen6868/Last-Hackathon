@@ -61,6 +61,26 @@ function strike(robot, tw, spec) {
   }
 }
 
+// Lấy đà trước khi đấm (event TELEGRAPH): kéo găng về sau, xoay thân ngược hướng đòn.
+// Giữ tư thế cho tới khi ANIM jab/hook thay track; nếu đòn bị huỷ thì tự về tư thế nền.
+const WINDUP_JAB_L = { shLx: -0.15, shLz: 0.4, elL: -1.9, twist: 0.4, bodyZ: -0.12, headX: 0.1 };
+const WINDUP_HOOK_L = { shLx: -0.55, shLz: 1.25, elL: -1.5, twist: 0.6, bodyZ: -0.05 };
+
+export function playWindup(robot, hand, kind, ms, tw) {
+  if (robot.ko) return;
+  const peakL = kind === 'hook' ? WINDUP_HOOK_L : WINDUP_JAB_L;
+  const peak = hand === 'L' ? peakL : mirrorPose(peakL);
+  const base = BASE[robot.base];
+  for (const [ch, v] of Object.entries(peak)) {
+    const [obj, key] = robot.channels[ch];
+    tw.track(obj, key, [
+      { to: v, dur: ms * 0.8, ease: 'outCubic' },
+      { dur: ms * 0.7 },
+      { to: base[ch], dur: 200, ease: 'inOutQuad' },
+    ]);
+  }
+}
+
 // Phát một animation theo tên trong contract (xem HUONG_DAN.md mục 5)
 export function playAnim(robot, name, tw) {
   if (name === 'reset') {

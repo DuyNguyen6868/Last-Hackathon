@@ -13,6 +13,15 @@ function banner(text, ms = 1200) {
   if (ms) bannerTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
+const popTimers = {};
+function pop(who, html, cls = '', ms = 1100) {
+  const el = $(`pop-${who}`);
+  el.innerHTML = html;
+  el.className = `pop ${who} ${cls} show`;
+  clearTimeout(popTimers[who]);
+  popTimers[who] = setTimeout(() => el.classList.remove('show'), ms);
+}
+
 function renderWins(wins) {
   $('wins-p1').textContent = '🏆'.repeat(wins.p1);
   $('wins-p2').textContent = '🏆'.repeat(wins.p2);
@@ -42,6 +51,18 @@ export function initHud({ onMatchOver } = {}) {
       banner(winner === 'p1' ? 'BẠN THẮNG! 🏆' : winner === 'p2' ? 'BẠN THUA!' : 'HOÀ!', 0);
       onMatchOver?.(winner);
     }
+  });
+
+  on('COMBO', ({ who, name, damage }) => {
+    pop(who, `${name}!<small>-${damage} HP</small>`, 'combo', 1500);
+  });
+
+  // Né/đỡ thành công thì nhắc người chơi phản đòn
+  on('MISS', ({ target }) => {
+    pop(target, target === 'p1' ? 'NÉ!<small>Phản đòn ngay ×1.5</small>' : 'NÉ!');
+  });
+  on('HIT', ({ target, blocked }) => {
+    if (blocked) pop(target, target === 'p1' ? 'ĐỠ!<small>Phản đòn ngay ×1.5</small>' : 'ĐỠ!');
   });
 
   on('COMMENTARY', ({ text }) => {

@@ -18,6 +18,8 @@ const SPECS = {
   p2: { scale: 1.08, leg: 1.2, chestW: 1.62, chestH: 1.0, chestD: 0.84, shoulderX: 1.06, padW: 0.62, padH: 0.52, padD: 0.82, armR: 0.17, fist: 0.52, legX: 0.4, legW: 0.46, legD: 0.48, headW: 0.52, headH: 0.4, headD: 0.54, headZ: 0.12 },
 };
 
+const _hand = new THREE.Vector3();
+
 // Chân: đùi và cẳng chân dài bằng nhau. Hông cách mắt cá 1.0, mắt cá cách sàn 0.1.
 const THIGH = 0.5;
 const SHIN = 0.5;
@@ -216,8 +218,19 @@ export function createRobot(id) {
     cyl(sp.armR * 0.8, sp.armR * 0.8, 0.12, dark, 0, 0, 0, wrist, 12);
     rbox(sp.fist, sp.fist, sp.fist * 1.08, body, 0, -sp.fist * 0.45, 0.02, wrist, 0.09); // găng
     rbox(sp.fist * 1.04, sp.fist * 0.3, sp.fist * 0.5, trim, 0, -sp.fist * 0.2, sp.fist * 0.35, wrist, 0.05); // phần đốt ngón
-    rbox(sp.fist * 0.9, 0.05, 0.05, rimMat, 0, -sp.fist * 0.2, sp.fist * 0.6, wrist, 0.01);
-    arms[side] = { shoulder, elbow };
+    const fistGlow = glow(pal.glow, 1.3); // material riêng để găng sáng cam khi lấy đà
+    rbox(sp.fist * 0.9, 0.05, 0.05, fistGlow, 0, -sp.fist * 0.2, sp.fist * 0.6, wrist, 0.01);
+    // Lớp vỏ phát sáng quanh găng, chỉ hiện khi lấy đà (với model thật thì được dời tới bàn tay model mỗi frame)
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(sp.fist * 0.5, 20, 14),
+      new THREE.MeshBasicMaterial({
+        color: 0xff8a00, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
+      }),
+    );
+    shell.position.set(0, -sp.fist * 0.45, 0.02);
+    shell.visible = false;
+    wrist.add(shell);
+    arms[side] = { shoulder, elbow, wrist, fistGlow, shell };
   }
 
   const channels = {
@@ -232,6 +245,7 @@ export function createRobot(id) {
   };
 
   const glowBase = new THREE.Color(pal.glow);
+  const chargeColor = new THREE.Color(0xff8a00);
   const phase = id === 'p1' ? 0 : 1.7;
 
   const robot = {
@@ -244,6 +258,7 @@ export function createRobot(id) {
     power: 1, // độ sáng đèn (0 khi KO)
     flash: 0, // nháy khi trúng đòn
     flashColor: new THREE.Color(0xff2a3d),
+    charge: { L: null, R: null }, // lấy đà: { t0, dur } theo từng tay
     channels,
     // Các object mà tween có thể đang điều khiển, để huỷ khi reset
     targets: new Set(Object.values(channels).map((c) => c[0])),
@@ -262,7 +277,19 @@ export function createRobot(id) {
       this.ko = false;
       this.power = 1;
       this.flash = 0;
+      this.clearCharge();
       this.applyPose(BASE.idle);
+    },
+
+    telegraph(side, ms, now) {
+      this.charge[side] = { t0: now, dur: ms };
+    },
+
+    clearCharge(side) {
+      for (const s of side ? [side] : ['L', 'R']) {
+        this.charge[s] = null;
+        arms[s].shell.visible = false;
+      }
     },
 
     update(dt, t) {
@@ -272,6 +299,22 @@ export function createRobot(id) {
         m.emissive.copy(m.userData.base).lerp(this.flashColor, f);
         m.emissiveIntensity = m.userData.baseI * this.power + this.flash * 2.5;
       }
+      // Găng sáng cam và nhấp nháy nhanh dần khi lấy đà
+      for (const s of ['L', 'R']) {
+        const c = this.charge[s];
+        if (!c) continue;
+        const p = (t - c.t0) / c.dur;
+        if (p > 1.4) {
+          this.clearCharge(s);
+          continue;
+        }
+        const level = Math.min(1, p);
+        const pulse = 0.65 + 0.35 * Math.sin(t * (0.02 + level * 0.05));
+        arms[s].fistGlow.emissive.copy(chargeColor);
+        arms[s].fistGlow.emissiveIntensity = 2 + 4 * level * pulse;
+        arms[s].shell.visible = true;
+        arms[s].shell.material.opacity = (0.08 + 0.3 * level) * pulse;
+      }
 
       if (this.model) {
         for (const m of this.model.materials) {
@@ -279,6 +322,12 @@ export function createRobot(id) {
           m.emissiveIntensity = f * 1.2;
         }
         this.model.update(t);
+        // Vỏ sáng lấy đà bám theo bàn tay của model thật
+        for (const s of ['L', 'R']) {
+          if (!arms[s].shell.visible) continue;
+          const hand = this.model.hands[s].getWorldPosition(_hand);
+          arms[s].shell.position.copy(arms[s].wrist.worldToLocal(hand));
+        }
         return;
       }
 

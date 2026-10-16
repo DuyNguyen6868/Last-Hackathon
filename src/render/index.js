@@ -6,7 +6,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { buildStage } from './stage.js';
 import { createRobot } from './robot.js';
 import { loadGlbRobots } from './robot-glb.js';
-import { playAnim } from './anim.js';
+import { playAnim, playWindup } from './anim.js';
 import { Effects } from './effects.js';
 import { Tweens } from './tween.js';
 import { initAudio, sfx } from './audio.js';
@@ -86,7 +86,11 @@ export function initRender({ container = document.body, bus, bloom = true, glb =
     if (!r) return;
     const wasKo = r.ko;
     playAnim(r, name, tweens);
-    if (name.startsWith('jab') || name.startsWith('hook')) sfx.whoosh();
+    if (name.startsWith('jab') || name.startsWith('hook')) {
+      sfx.whoosh();
+      r.clearCharge?.(name.slice(-1));
+    }
+    if (['idle', 'hit', 'ko', 'reset'].includes(name)) r.clearCharge?.();
     if (name === 'ko' && !wasKo) {
       sfx.ko();
       fx.shake(0.3);
@@ -119,6 +123,28 @@ export function initRender({ container = document.body, bus, bloom = true, glb =
       r.flash = 1;
       sfx.punch(strength);
     }
+  });
+
+  // Đối thủ lấy đà trước khi đấm: kéo găng về sau, găng sáng cam, tiếng nạp lực
+  bus.on('TELEGRAPH', ({ who, hand, kind, ms }) => {
+    const r = robots[who];
+    if (!r || r.ko) return;
+    playWindup(r, hand, kind, ms, tweens);
+    r.telegraph?.(hand, ms, performance.now());
+    sfx.charge(ms / 1000);
+  });
+
+  // Combo / phản đòn trúng: tia lửa vàng, 2 vòng xung kích, rung mạnh
+  bus.on('COMBO', ({ target, name }) => {
+    const r = robots[target];
+    if (!r) return;
+    r.chestAnchor.getWorldPosition(v);
+    const at = v.clone();
+    fx.burst(at, 0xffd23f, 45, 7);
+    fx.ring(at, 0xffd23f);
+    later(90, () => fx.ring(at, 0xffffff));
+    fx.shake(name.includes('STORM') ? 0.38 : 0.22);
+    sfx.combo();
   });
 
   // state theo game.js: countdown -> fight -> end | ko -> over (cũng nhận 'start' theo HUONG_DAN.md)

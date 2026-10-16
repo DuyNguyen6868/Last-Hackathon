@@ -267,5 +267,5 @@ export function buildModelRig(scene, parts, id = 'p1') {
     parts.ground.position.y = -(box2.min.y - group.position.y) / group.scale.x;
   }
 
-  return { holder, update, materials };
+  return { holder, update, materials, hands: { L: B.L.hand, R: B.R.hand } };
 }

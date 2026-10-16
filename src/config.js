@@ -10,9 +10,24 @@ export const CONFIG = {
   hitDelayMs: 250, // từ lúc ra đòn tới lúc tính trúng, để đối phương kịp đỡ/né
   punchCooldownMs: 350,
   hitStunMs: 220, // bị trúng đòn thì không ra đòn được trong khoảng này
-  dodgeWindowMs: 650, // né chỉ có hiệu lực trong khoảng này sau khi bắt đầu né
+  dodgeWindowMs: 1000, // né chỉ có hiệu lực trong khoảng này sau khi bắt đầu né (phải dài hơn windupMs + hitDelayMs của AI)
   damage: { jab: 5, hook: 10 },
   guardMultiplier: 0.2,
+
+  // Combo: các đòn liên tiếp, đổi tay luân phiên, mỗi đòn cách nhau không quá comboGapMs.
+  // Đòn cuối phải trúng (không bị đỡ hay né). Combo dài được ưu tiên hơn combo ngắn.
+  // Thưởng cộng dồn theo từng bước: J→K→U→I lần lượt kích hoạt ONE-TWO, TRIPLE THREAT, STEEL STORM
+  // (cả chuỗi trúng hết ≈ 43 sát thương, so với 30 nếu không có combo).
+  comboGapMs: 900,
+  combos: [
+    { name: 'ONE-TWO', seq: ['jab', 'jab'], bonus: 2 },
+    { name: 'HAMMER', seq: ['hook', 'hook'], bonus: 5 },
+    { name: 'TRIPLE THREAT', seq: ['jab', 'jab', 'hook'], bonus: 4, stunMs: 400 },
+    { name: 'STEEL STORM', seq: ['jab', 'jab', 'hook', 'hook'], bonus: 7, stunMs: 600 },
+  ],
+  // Phản đòn: vừa né hoặc đỡ thành công thì đòn trúng tiếp theo trong khoảng này được nhân sát thương
+  counterWindowMs: 900,
+  counterMultiplier: 1.5,
 
   // Vision (Chiến): các ngưỡng tính trên world landmarks (đơn vị mét)
   vision: {
@@ -25,7 +40,7 @@ export const CONFIG = {
     hookElbowHeight: 0.14, // khuỷu tay cao gần bằng vai (m)
     guardOn: 0.75, // khoảng cách cổ tay → mũi, tính theo bề rộng vai
     guardOff: 0.95,
-    dodgeOn: 0.35, // mũi lệch khỏi vị trí gốc, tính theo bề rộng vai
-    dodgeOff: 0.2,
+    dodgeOn: 0.28, // mũi lệch khỏi vị trí gốc, tính theo bề rộng vai
+    dodgeOff: 0.16,
   },
 };
