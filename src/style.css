@@ -89,4 +89,5 @@ button.primary { background: var(--p1); border-color: var(--p1); font-weight: 70
 button:disabled { opacity: 0.5; cursor: default; }
 .buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 #cam-status { margin: 0; color: var(--muted); font-size: 14px; }
+#cam-status.warning { color: #ffd23f; font-weight: 700; }
 .keys { color: var(--muted); font-size: 13px; max-width: 520px; }

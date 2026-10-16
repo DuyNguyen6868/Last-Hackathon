@@ -28,6 +28,14 @@ initHud({
 
 // Menu
 $('btn-start').addEventListener('click', () => {
+  if (!visionSession) {
+    const status = $('cam-status');
+    status.textContent = '⚠️ Bạn cần bật webcam và cho phép quyền truy cập trước khi vào trận.';
+    status.classList.add('warning');
+    $('btn-cam').focus();
+    return;
+  }
+
   unlockAudio();
   opponent.setLevel($('difficulty').value);
   $('menu').classList.add('hidden');
@@ -42,12 +50,21 @@ $('btn-cam').addEventListener('click', async () => {
   try {
     visionSession = await startVision({
       video: $('cam-video'), canvas: $('cam-canvas'), debugEl: $('cam-debug'),
-      onStatus: (s) => ($('cam-status').textContent = s),
+      onStatus: (s) => {
+        $('cam-status').textContent = s;
+        $('cam-status').classList.remove('warning');
+      },
     });
     btn.textContent = '📷 Webcam đang bật';
   } catch (err) {
     console.error(err);
-    $('cam-status').textContent = `Không bật được webcam (${err.message}). Vẫn chơi được bằng bàn phím.`;
+    const message = err.name === 'NotAllowedError'
+      ? 'Bạn chưa cấp quyền webcam. Hãy cho phép camera trong cài đặt trình duyệt rồi thử lại.'
+      : err.name === 'NotFoundError'
+        ? 'Không tìm thấy webcam. Hãy kết nối camera rồi thử lại.'
+        : `Không bật được webcam (${err.message}). Hãy kiểm tra camera và quyền truy cập rồi thử lại.`;
+    $('cam-status').textContent = `⚠️ ${message}`;
+    $('cam-status').classList.add('warning');
     $('cam').classList.add('hidden');
     btn.disabled = false;
   }
