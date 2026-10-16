@@ -182,8 +182,8 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 - [x] FSM cho ZEUS: phản ứng khi p1 vừa đấm (đỡ hoặc né), dùng hook khi p1 đỡ lâu, combo, thủ nhiều hơn khi máu thấp, 3 mức khó **(đã có khung)**
 - [x] `server/index.js` gọi Claude để bình luận sau mỗi hiệp, `ai/commentary.js` có câu dự phòng **(đã có khung)**
 - [ ] Lấy API key, chạy `npm run server`, thử và chỉnh prompt bình luận cho hay hơn
-- [ ] Cân bằng `DIFFICULTY` trong `opponent.js` để Easy dễ thắng, Hard khó thật
-- [ ] *(Nếu kịp)* LLM làm huấn luyện viên cho ZEUS: giữa hiệp trả về JSON chiến thuật như `{"aggro":0.7,"favor":"hook"}` (xem llm-colosseum trong [REPOS.md](REPOS.md))
+- [x] Cân bằng `DIFF` trong `opponent.js` để Easy dễ thắng, Hard khó thật (đo bằng `node src/ai/dev/balance.mjs`)
+- [x] *(Nếu kịp)* LLM làm huấn luyện viên cho ZEUS: giữa hiệp trả về JSON chiến thuật (`src/ai/coach.js`, `POST /api/coach`; server lỗi thì dùng luật), xem llm-colosseum trong [REPOS.md](REPOS.md)
 - [ ] Slide pitch (5–6 slide), kịch bản demo, **quay video dự phòng** lúc 3:30
 
 ---
