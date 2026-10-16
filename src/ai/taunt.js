@@ -1,4 +1,4 @@
-// Robot đỏ khiêu khích lúc đầu hiệp: chọn câu theo bối cảnh và hiện bong bóng thoại riêng.
+// Lời thoại của robot đỏ: khiêu khích đầu hiệp, ăn mừng khi thắng, cay cú khi thua. Hiện bong bóng thoại riêng.
 // Cũng phát TAUNT { who, line } để HUD/render dùng nếu muốn.
 import { emit } from '../events.js';
 
@@ -26,6 +26,18 @@ const LINES = {
     'Không tệ… với một con người.',
   ],
   interrupted: ['Ê! Chưa nói xong mà!', 'Chơi xấu thế!', 'Đánh lén à?!'],
+  win: [
+    'Con người 0 – Robot 1!',
+    'Đã cập nhật dữ liệu: nhân loại quá dễ!',
+    'GG! Lần sau nhớ khởi động kỹ hơn nhé!',
+    'Ai là nhà vô địch? Tôi! Là tôi đây!',
+  ],
+  lose: [
+    'Lỗi 404: không tìm thấy chiến thắng…',
+    'Không công bằng… webcam bị lag!',
+    'Tôi… sẽ… quay… lại…',
+    'Đang khởi động lại… lần sau sẽ khác!',
+  ],
 };
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -42,6 +54,8 @@ export function tauntLine({ round, hp }) {
 }
 
 export const interruptedLine = () => pick(LINES.interrupted);
+export const winLine = () => pick(LINES.win);
+export const loseLine = () => pick(LINES.lose);
 
 export function say(who, line) {
   emit('TAUNT', { who, line });

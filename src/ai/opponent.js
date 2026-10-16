@@ -1,7 +1,8 @@
-// Đối thủ AI (p2): máy trạng thái TAUNT (đầu hiệp) → IDLE → APPROACH → ATTACK / GUARD / DODGE → RECOVER.
+// Đối thủ AI (p2): máy trạng thái TAUNT (đầu hiệp) → IDLE → APPROACH → ATTACK / GUARD / DODGE → RECOVER,
+// và CELEBRATE khi trận kết thúc có người thắng.
 // Chỉ giao tiếp qua event bus: nghe hành động của p1, phát PUNCH / GUARD / DODGE cho p2.
 import { on, emit } from '../events.js';
-import { tauntLine, interruptedLine, say } from './taunt.js';
+import { tauntLine, interruptedLine, winLine, loseLine, say } from './taunt.js';
 
 const ME = 'p2';
 const TICK_MS = 100;
@@ -123,6 +124,35 @@ function startTaunt() {
   enter('TAUNT');
 }
 
+// Ăn mừng khi thắng: chỉ dùng GUARD / DODGE, không đấm để game không tính thêm đòn sau K.O.
+const CELEBRATIONS = {
+  // nhảy múa lắc lư trái phải
+  dance: () => [0, 250, 500, 750, 1000, 1250].map((dt, i) => [dt, () => setDodge(i % 2 ? 'R' : 'L')]).concat([[1500, () => setDodge(null)]]),
+  // giơ găng ăn mừng, giữ lâu rồi giơ lại
+  gloves: () => [[0, () => setGuard(true)], [900, () => setGuard(false)], [1200, () => setGuard(true)], [2100, () => setGuard(false)]],
+  // đi vòng quanh đài: né một bên, giơ găng, né bên kia, giơ găng
+  victoryLap: () => [
+    [0, () => setDodge('L')], [400, () => setGuard(true)], [800, () => (setGuard(false), setDodge('R'))],
+    [1200, () => setGuard(true)], [1600, () => (setGuard(false), setDodge(null))],
+  ],
+};
+
+const CELEBRATE_DELAY_MS = 700; // chờ animation K.O. chạy xong rồi mới ăn mừng
+
+function celebrate(winner) {
+  const routine = rand(Object.keys(CELEBRATIONS));
+  emit('CELEBRATE', { who: winner, routine: winner === ME ? routine : null });
+  if (winner === ME) {
+    const start = Date.now() + CELEBRATE_DELAY_MS;
+    script = [[0, () => say(ME, winLine())], ...CELEBRATIONS[routine]()].map(([dt, act]) => ({ at: start + dt, act }));
+    enter('CELEBRATE');
+    log('celebrate', routine);
+  } else {
+    // p1 thắng: robot đỏ không cử động được (đã thua), chỉ cay cú một câu
+    setTimeout(() => say(ME, loseLine()), CELEBRATE_DELAY_MS);
+  }
+}
+
 function cancelTaunt() {
   if (state !== 'TAUNT') return;
   script = [];
@@ -191,11 +221,19 @@ function doubleSlip(p1Hand) {
 }
 
 function tick() {
-  if (!active) return;
+  if (!active && state !== 'CELEBRATE') return;
   const now = Date.now();
   const done = now >= stateUntil;
 
   switch (state) {
+    case 'CELEBRATE':
+      while (script.length && script[0].at <= now) script.shift().act();
+      if (!script.length) {
+        releaseDefense();
+        enter('IDLE');
+      }
+      break;
+
     case 'TAUNT':
       while (script.length && script[0].at <= now) script.shift().act();
       if (!script.length) {
@@ -321,7 +359,7 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt
     }
   });
   on('HP', (v) => (hp = v));
-  on('ROUND', ({ round: r, state: s }) => {
+  on('ROUND', ({ round: r, state: s, winner }) => {
     if (s === 'start') {
       if (r) round = r;
       active = true;
@@ -331,6 +369,7 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt
     } else if (s === 'end' || s === 'ko') {
       active = false;
       reset();
+      if (winner === 'p1' || winner === 'p2') celebrate(winner);
     }
   });
 
