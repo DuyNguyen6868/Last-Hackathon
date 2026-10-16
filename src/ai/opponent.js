@@ -7,17 +7,46 @@ const ME = 'p2';
 const TICK_MS = 100;
 const HIT_DELAY_MS = 250; // game tính trúng đòn sau 250ms, phản xạ phải nhanh hơn mức này
 
-// Né sang hướng nào thì tránh được đòn từ tay nào của p1.
-// TODO(Duy): khớp với dodgeAvoids() trong game; nếu ngược thì đổi L/R ở đây.
-export const DODGE_AWAY = { L: 'R', R: 'L' };
+// Đòn từ tay nào của p1 thì né sang hướng nào. Hai cách hiểu, phải khớp với dodgeAvoids() của game:
+//   opposite: tay L → né R      same: tay L → né L
+// Chạy `node src/ai/dev/scenarios.mjs` để xem kết quả của từng cách rồi chốt bằng setDodgeMap().
+export const DODGE_MAPS = {
+  opposite: { L: 'R', R: 'L' },
+  same: { L: 'L', R: 'R' },
+};
+let dodgeMapName = 'opposite';
+
+const flip = (h) => (h === 'L' ? 'R' : 'L');
+
+// Các kiểu phản đòn. Mỗi kiểu trả về [độ trễ ms, tay, loại đòn].
+// Né sang bên nào thì trọng tâm dồn về bên đó, nên tay bên đó tung hook.
+export const COUNTERS = {
+  slipHook: (side) => [[0, side, 'hook']],
+  slipJabHook: (side) => [[0, flip(side), 'jab'], [250, side, 'hook']],
+  blockReturn: () => {
+    const h = Math.random() < 0.5 ? 'L' : 'R';
+    return [[0, h, 'jab'], [220, flip(h), 'jab']];
+  },
+};
 
 export const DIFF = {
-  // react: xác suất thủ/né khi p1 đấm · reactMs: độ trễ phản xạ · aggro: xác suất ra đòn mỗi nhịp
-  // cooldownMs: nghỉ giữa 2 lần ra đòn · stunMs: khựng khi trúng đòn · smartDodge: né đúng hướng
-  // combo: xác suất đánh jab-jab-hook · counter: xác suất phản đòn ngay sau khi thủ/né
-  easy:   { react: 0.2,  reactMs: 210, aggro: 0.3, cooldownMs: 1500, stunMs: 350, smartDodge: false, combo: 0,    counter: 0 },
-  normal: { react: 0.45, reactMs: 160, aggro: 0.4, cooldownMs: 1100, stunMs: 250, smartDodge: false, combo: 0.15, counter: 0.2 },
-  hard:   { react: 0.7,  reactMs: 90,  aggro: 0.7, cooldownMs: 600,  stunMs: 120, smartDodge: true,  combo: 0.35, counter: 0.5 },
+  // react: xác suất thủ/né khi p1 đấm · reactMs: độ trễ phản xạ · dodgeBias: xác suất chọn né thay vì đỡ
+  // aggro: xác suất ra đòn mỗi nhịp · cooldownMs: nghỉ giữa 2 lần ra đòn · stunMs: khựng khi trúng đòn
+  // smartDodge: né đúng hướng · doubleSlip: né liên tiếp khi p1 ra 2 đòn · combo: xác suất jab-jab-hook
+  // counter: xác suất phản đòn sau khi thủ/né · slipCounters: các kiểu phản đòn sau khi né
+  // guardUp: xác suất tự thủ/né khi chưa ra đòn
+  easy: {
+    react: 0.2, reactMs: 210, dodgeBias: 0.5, aggro: 0.3, cooldownMs: 1500, stunMs: 350,
+    smartDodge: false, doubleSlip: false, combo: 0, counter: 0, slipCounters: [], guardUp: 0.12,
+  },
+  normal: {
+    react: 0.45, reactMs: 160, dodgeBias: 0.5, aggro: 0.4, cooldownMs: 1100, stunMs: 250,
+    smartDodge: false, doubleSlip: false, combo: 0.15, counter: 0.3, slipCounters: ['slipHook'], guardUp: 0.12,
+  },
+  hard: {
+    react: 0.7, reactMs: 90, dodgeBias: 0.6, aggro: 0.7, cooldownMs: 600, stunMs: 120,
+    smartDodge: true, doubleSlip: true, combo: 0.35, counter: 0.6, slipCounters: ['slipHook', 'slipJabHook'], guardUp: 0.12,
+  },
 };
 
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -34,16 +63,18 @@ let state = 'IDLE';
 let stateUntil = 0;
 let stunUntil = 0;
 let lastAttack = 0;
-let queue = []; // các cú đấm combo đang chờ: { at, hand, kind }
+let queue = []; // các cú đấm đang chờ: { at, hand, kind }
 let reactTimer = null;
 let guarding = false;
 let dodging = null;
+let defense = null; // lần thủ/né hiện tại: { type: 'guard'|'dodge', dir, double, failed }
+let lastCounter = null;
 let script = []; // các bước khiêu khích đang chờ: { at, act }
 let round = 1;
 let hp = { p1: 100, p2: 100 };
 let tauntEnabled = true;
 
-const p1 = { guard: false, guardSince: 0, dodge: null, lastPunch: 0 };
+const p1 = { guard: false, guardSince: 0, dodge: null, lastPunch: 0, pendingUntil: 0 };
 
 const log = (...a) => debug && console.log('[AI]', ...a);
 
@@ -102,37 +133,61 @@ function cancelTaunt() {
 
 const p1GuardingLong = () => p1.guard && Date.now() - p1.guardSince > 1000;
 
-function startAttack() {
+function defaultPlan() {
+  if (Math.random() < cfg.combo) {
+    const lead = rand(['L', 'R']);
+    return [[0, lead, 'jab'], [280, flip(lead), 'jab'], [600, lead, 'hook']]; // jab - jab - hook
+  }
+  const kind = p1GuardingLong() ? (Math.random() < 0.8 ? 'hook' : 'jab') : Math.random() < 0.2 ? 'hook' : 'jab';
+  return [[0, rand(['L', 'R']), kind]];
+}
+
+function startAttack(plan = defaultPlan()) {
   releaseDefense();
   const now = Date.now();
-  if (Math.random() < cfg.combo) {
-    // jab - jab - hook
-    const lead = rand(['L', 'R']);
-    const rear = lead === 'L' ? 'R' : 'L';
-    queue = [
-      { at: now, hand: lead, kind: 'jab' },
-      { at: now + 280, hand: rear, kind: 'jab' },
-      { at: now + 600, hand: lead, kind: 'hook' },
-    ];
-  } else {
-    const kind = p1GuardingLong() ? (Math.random() < 0.8 ? 'hook' : 'jab') : Math.random() < 0.2 ? 'hook' : 'jab';
-    queue = [{ at: now, hand: rand(['L', 'R']), kind }];
-  }
+  queue = plan.map(([dt, hand, kind]) => ({ at: now + dt, hand, kind }));
   enter('ATTACK');
 }
 
-function defend(p1Hand) {
+// Chọn kiểu phản đòn theo lần thủ/né vừa xong. Né hụt (vẫn bị trúng) thì không phản đòn.
+function counterPlan(d) {
+  if (!d || d.failed) return null;
+  if (d.type === 'dodge' && d.dir && cfg.slipCounters.length) {
+    const name = d.double && cfg.slipCounters.includes('slipJabHook') ? 'slipJabHook' : rand(cfg.slipCounters);
+    return { name, plan: COUNTERS[name](d.dir) };
+  }
+  if (d.type === 'guard') return { name: 'blockReturn', plan: COUNTERS.blockReturn() };
+  return null;
+}
+
+function dodgeDirFor(p1Hand) {
+  return cfg.smartDodge && p1Hand ? DODGE_MAPS[dodgeMapName][p1Hand] : rand(['L', 'R']);
+}
+
+function defend(p1Hand, delay = 0) {
   queue = [];
-  if (Math.random() < 0.5) {
+  if (Math.random() >= cfg.dodgeBias) {
     setDodge(null);
     setGuard(true);
+    defense = { type: 'guard' };
     enter('GUARD', between(400, 700));
   } else {
     setGuard(false);
-    const dir = cfg.smartDodge && p1Hand ? DODGE_AWAY[p1Hand] : rand(['L', 'R']);
+    const dir = dodgeDirFor(p1Hand);
     setDodge(dir);
-    enter('DODGE', between(350, 500));
+    defense = { type: 'dodge', dir };
+    // né để đáp lại một cú đấm: giữ tới khi cú đấm đó được tính xong rồi phản đòn ngay
+    enter('DODGE', p1Hand ? HIT_DELAY_MS - delay + 120 : between(350, 500));
   }
+}
+
+// p1 ra đòn thứ hai khi AI còn đang né: né tiếp sang hướng của đòn mới
+function doubleSlip(p1Hand) {
+  const dir = dodgeDirFor(p1Hand);
+  setDodge(dir);
+  defense = { type: 'dodge', dir, double: true };
+  enter('DODGE', HIT_DELAY_MS - cfg.reactMs + 120);
+  log('double slip', dir);
 }
 
 function tick() {
@@ -160,7 +215,7 @@ function tick() {
       const opening = now - p1.lastPunch < 500;
       const aggro = Math.min(1, cfg.aggro + (p1GuardingLong() ? 0.25 : 0) + (opening ? 0.2 : 0));
       if (ready && Math.random() < aggro) startAttack();
-      else if (Math.random() < 0.12) defend(null); // thỉnh thoảng thủ chủ động
+      else if (Math.random() < cfg.guardUp) defend(null); // thỉnh thoảng thủ chủ động
       else enter('APPROACH', between(150, 350)); // chưa ra đòn thì nhử thêm một nhịp
       break;
     }
@@ -175,10 +230,16 @@ function tick() {
 
     case 'GUARD':
     case 'DODGE':
-      if (done) {
+      // giữ thủ/né tới khi mọi cú đấm của p1 đang bay đã được tính xong
+      if (done && now >= p1.pendingUntil) {
         releaseDefense();
-        if (Math.random() < cfg.counter) startAttack(); // phản đòn ngay sau khi thủ/né
-        else enter('RECOVER', 150);
+        const c = Math.random() < cfg.counter ? counterPlan(defense) : null;
+        defense = null;
+        if (c) {
+          lastCounter = { name: c.name, at: now };
+          log('counter', c.name);
+          startAttack(c.plan);
+        } else enter('RECOVER', 150);
       }
       break;
 
@@ -190,14 +251,18 @@ function tick() {
 
 function onP1Punch({ hand }) {
   p1.lastPunch = Date.now();
+  p1.pendingUntil = p1.lastPunch + HIT_DELAY_MS + 50;
   if (!active || reactTimer) return;
   cancelTaunt(); // p1 đấm lúc đang khiêu khích thì thôi diễn, vào trận luôn
-  if (state === 'GUARD' || state === 'DODGE') return;
+  if (state === 'GUARD') return;
+  if (state === 'DODGE' && !cfg.doubleSlip) return;
   if (Math.random() >= cfg.react) return;
   const delay = Math.min(cfg.reactMs, HIT_DELAY_MS - 30);
   reactTimer = setTimeout(() => {
     reactTimer = null;
-    if (active) defend(hand);
+    if (!active) return;
+    if (state === 'DODGE') doubleSlip(hand);
+    else defend(hand, delay);
   }, delay);
 }
 
@@ -206,23 +271,34 @@ function reset() {
   reactTimer = null;
   queue = [];
   script = [];
+  defense = null;
   stunUntil = 0;
   releaseDefense();
   enter('IDLE');
 }
 
-export function setDifficulty(name) {
+// overrides: chỉnh tạm vài thông số (dùng cho kịch bản test), ví dụ { react: 1, dodgeBias: 1 }
+export function setDifficulty(name, overrides = {}) {
   if (!DIFF[name]) return;
   diffName = name;
-  cfg = DIFF[name];
-  log('difficulty', name);
+  cfg = { ...DIFF[name], ...overrides };
+  log('difficulty', name, overrides);
+}
+
+export function setDodgeMap(name) {
+  if (!DODGE_MAPS[name]) return;
+  dodgeMapName = name;
+  log('dodge map', name);
 }
 
 export const getDifficulty = () => diffName;
+export const getDodgeMap = () => dodgeMapName;
 export const getState = () => state;
+export const getLastCounter = () => lastCounter;
 
-export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt = true } = {}) {
+export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt = true, dodgeMap } = {}) {
   setDifficulty(difficulty);
+  if (dodgeMap) setDodgeMap(dodgeMap);
   debug = dbg;
   tauntEnabled = taunt;
   if (started) return;
@@ -236,10 +312,11 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt
   });
   on('DODGE', (e) => e.who === 'p1' && (p1.dodge = e.dir));
   on('HIT', ({ target, blocked }) => {
-    // bị trúng đòn thì khựng lại một chút, bỏ combo đang dở
+    // bị trúng đòn thì khựng lại một chút, bỏ combo đang dở; đang né mà vẫn trúng thì mất quyền phản đòn
     if (target === ME && !blocked && active) {
       queue = [];
       stunUntil = Date.now() + cfg.stunMs;
+      if (defense) defense.failed = true;
       if (state === 'ATTACK') enter('RECOVER', 0);
     }
   });
