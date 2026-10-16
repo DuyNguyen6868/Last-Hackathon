@@ -1,4 +1,4 @@
-// Điểm vào duy nhất của phần AI. Trong main.js: import { initAI } from './ai/index.js'; initAI();
+// Điểm vào thay thế cho phần AI (main.js hiện dùng thẳng createOpponent() và initCommentary()).
 // Mức khó lấy từ URL (?diff=easy|normal|hard), mặc định normal. Thêm ?aidebug để log FSM ra console.
 // Hướng né: ?dodge=opposite|same (xem DODGE_MAPS trong opponent.js), mặc định opposite.
 // AI chỉ bắt đầu khi nhận ROUND { round, state: 'start' }: khiêu khích ~1s rồi mới vào đánh.

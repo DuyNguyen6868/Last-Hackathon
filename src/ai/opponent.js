@@ -2,20 +2,22 @@
 // và CELEBRATE khi trận kết thúc có người thắng.
 // Chỉ giao tiếp qua event bus: nghe hành động của p1, phát PUNCH / GUARD / DODGE cho p2.
 import { on, emit } from '../events.js';
+import { CONFIG } from '../config.js';
 import { tauntLine, interruptedLine, winLine, loseLine, say } from './taunt.js';
 
 const ME = 'p2';
 const TICK_MS = 100;
-const HIT_DELAY_MS = 250; // game tính trúng đòn sau 250ms, phản xạ phải nhanh hơn mức này
+const HIT_DELAY_MS = CONFIG.hitDelayMs; // game tính trúng đòn sau khoảng này, phản xạ phải nhanh hơn
+const GAP = CONFIG.punchCooldownMs + 50; // game bỏ qua cú đấm ra quá sát cú trước, nên combo phải giãn ra
 
-// Đòn từ tay nào của p1 thì né sang hướng nào. Hai cách hiểu, phải khớp với dodgeAvoids() của game:
-//   opposite: tay L → né R      same: tay L → né L
-// Chạy `node src/ai/dev/scenarios.mjs` để xem kết quả của từng cách rồi chốt bằng setDodgeMap().
+// Đòn từ tay nào của p1 thì né sang hướng nào:   opposite: tay L → né R      same: tay L → né L
+// game.js tính né theo thời gian (CONFIG.dodgeWindowMs), không theo hướng, nên đây chỉ là chuyện hình ảnh.
+// Chốt 'same': dodge_L đẩy robot sang trái của chính nó, tức là tránh xa nắm đấm trái của p1 (hai robot đối mặt).
 export const DODGE_MAPS = {
   opposite: { L: 'R', R: 'L' },
   same: { L: 'L', R: 'R' },
 };
-let dodgeMapName = 'opposite';
+let dodgeMapName = 'same';
 
 const flip = (h) => (h === 'L' ? 'R' : 'L');
 
@@ -23,10 +25,10 @@ const flip = (h) => (h === 'L' ? 'R' : 'L');
 // Né sang bên nào thì trọng tâm dồn về bên đó, nên tay bên đó tung hook.
 export const COUNTERS = {
   slipHook: (side) => [[0, side, 'hook']],
-  slipJabHook: (side) => [[0, flip(side), 'jab'], [250, side, 'hook']],
+  slipJabHook: (side) => [[0, flip(side), 'jab'], [GAP, side, 'hook']],
   blockReturn: () => {
     const h = Math.random() < 0.5 ? 'L' : 'R';
-    return [[0, h, 'jab'], [220, flip(h), 'jab']];
+    return [[0, h, 'jab'], [GAP, flip(h), 'jab']];
   },
 };
 
@@ -73,6 +75,7 @@ let lastCounter = null;
 let script = []; // các bước khiêu khích đang chờ: { at, act }
 let round = 1;
 let hp = { p1: 100, p2: 100 };
+let wins = null;
 let tauntEnabled = true;
 
 const p1 = { guard: false, guardSince: 0, dodge: null, lastPunch: 0, pendingUntil: 0 };
@@ -120,7 +123,7 @@ const TAUNTS = [
 function startTaunt() {
   const now = Date.now();
   script = rand(TAUNTS).map(([dt, act]) => ({ at: now + dt, act }));
-  say(ME, tauntLine({ round, hp }));
+  say(ME, tauntLine({ round, hp, wins }));
   enter('TAUNT');
 }
 
@@ -137,7 +140,7 @@ const CELEBRATIONS = {
   ],
 };
 
-const CELEBRATE_DELAY_MS = 700; // chờ animation K.O. chạy xong rồi mới ăn mừng
+const CELEBRATE_DELAY_MS = 300; // 'over' đến sau K.O. CONFIG.matchEndDelayMs rồi, chỉ chờ thêm chút
 
 function celebrate(winner) {
   const routine = rand(Object.keys(CELEBRATIONS));
@@ -166,7 +169,7 @@ const p1GuardingLong = () => p1.guard && Date.now() - p1.guardSince > 1000;
 function defaultPlan() {
   if (Math.random() < cfg.combo) {
     const lead = rand(['L', 'R']);
-    return [[0, lead, 'jab'], [280, flip(lead), 'jab'], [600, lead, 'hook']]; // jab - jab - hook
+    return [[0, lead, 'jab'], [GAP, flip(lead), 'jab'], [2 * GAP, lead, 'hook']]; // jab - jab - hook
   }
   const kind = p1GuardingLong() ? (Math.random() < 0.8 ? 'hook' : 'jab') : Math.random() < 0.2 ? 'hook' : 'jab';
   return [[0, rand(['L', 'R']), kind]];
@@ -177,6 +180,15 @@ function startAttack(plan = defaultPlan()) {
   const now = Date.now();
   queue = plan.map(([dt, hand, kind]) => ({ at: now + dt, hand, kind }));
   enter('ATTACK');
+  firePunches(now); // cú đầu ra ngay, không chờ tick sau (nếu chờ thì khoảng cách tới cú sau bị ngắn lại)
+}
+
+function firePunches(now) {
+  // game bỏ qua cú đấm ra quá sát cú trước, nên luôn giữ đủ khoảng GAP
+  while (queue.length && queue[0].at <= now && now - lastAttack >= GAP) {
+    const p = queue.shift();
+    punch(p.hand, p.kind);
+  }
 }
 
 // Chọn kiểu phản đòn theo lần thủ/né vừa xong. Né hụt (vẫn bị trúng) thì không phản đòn.
@@ -221,7 +233,7 @@ function doubleSlip(p1Hand) {
 }
 
 function tick() {
-  if (!active && state !== 'CELEBRATE') return;
+  if (!active && state !== 'CELEBRATE' && state !== 'TAUNT') return;
   const now = Date.now();
   const done = now >= stateUntil;
 
@@ -259,10 +271,7 @@ function tick() {
     }
 
     case 'ATTACK':
-      while (queue.length && queue[0].at <= now) {
-        const p = queue.shift();
-        punch(p.hand, p.kind);
-      }
+      firePunches(now);
       if (!queue.length) enter('RECOVER', between(300, 500));
       break;
 
@@ -290,8 +299,8 @@ function tick() {
 function onP1Punch({ hand }) {
   p1.lastPunch = Date.now();
   p1.pendingUntil = p1.lastPunch + HIT_DELAY_MS + 50;
-  if (!active || reactTimer) return;
   cancelTaunt(); // p1 đấm lúc đang khiêu khích thì thôi diễn, vào trận luôn
+  if (!active || reactTimer) return;
   if (state === 'GUARD') return;
   if (state === 'DODGE' && !cfg.doubleSlip) return;
   if (Math.random() >= cfg.react) return;
@@ -334,7 +343,7 @@ export const getDodgeMap = () => dodgeMapName;
 export const getState = () => state;
 export const getLastCounter = () => lastCounter;
 
-export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt = true, dodgeMap } = {}) {
+export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt = true, dodgeMap, autoTick = true } = {}) {
   setDifficulty(difficulty);
   if (dodgeMap) setDodgeMap(dodgeMap);
   debug = dbg;
@@ -353,25 +362,49 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt
     // bị trúng đòn thì khựng lại một chút, bỏ combo đang dở; đang né mà vẫn trúng thì mất quyền phản đòn
     if (target === ME && !blocked && active) {
       queue = [];
-      stunUntil = Date.now() + cfg.stunMs;
+      stunUntil = Date.now() + Math.max(cfg.stunMs, CONFIG.hitStunMs);
       if (defense) defense.failed = true;
       if (state === 'ATTACK') enter('RECOVER', 0);
     }
   });
   on('HP', (v) => (hp = v));
-  on('ROUND', ({ round: r, state: s, winner }) => {
-    if (s === 'start') {
-      if (r) round = r;
-      active = true;
+  // game.js: countdown → fight → end | ko → over. Vẫn nhận 'start' theo HUONG_DAN (dùng trong kịch bản test).
+  on('ROUND', ({ round: r, state: s, winner, wins: w }) => {
+    if (r) round = r;
+    if (w) wins = w;
+    if (s === 'countdown') {
+      active = false;
       reset();
+      if (tauntEnabled) startTaunt(); // khiêu khích trong lúc đếm ngược
+    } else if (s === 'fight' || s === 'start') {
+      const taunting = state === 'TAUNT';
+      active = true;
+      if (!taunting) reset();
       lastAttack = Date.now(); // cho người chơi một nhịp trước cú đầu tiên
-      if (tauntEnabled) startTaunt();
+      if (s === 'start' && tauntEnabled) startTaunt();
     } else if (s === 'end' || s === 'ko') {
       active = false;
       reset();
-      if (winner === 'p1' || winner === 'p2') celebrate(winner);
+    } else if (s === 'over' && (winner === 'p1' || winner === 'p2')) {
+      celebrate(winner); // ăn mừng người thắng cả trận
     }
   });
 
-  setInterval(tick, TICK_MS);
+  if (autoTick) setInterval(tick, TICK_MS);
+}
+
+// Giao diện main.js đang dùng: const opponent = createOpponent(); opponent.setLevel(lv); opponent.update(dt, now)
+export function createOpponent() {
+  const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+  startOpponent({ debug: params.has('aidebug'), dodgeMap: params.get('dodge') ?? undefined, autoTick: false });
+  let acc = 0;
+  return {
+    setLevel: (level) => setDifficulty(DIFF[level] ? level : 'normal'),
+    update(dt) {
+      acc += dt * 1000;
+      if (acc < TICK_MS) return;
+      acc = 0;
+      tick();
+    },
+  };
 }

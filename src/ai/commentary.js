@@ -1,6 +1,7 @@
 // Bình luận viên giữa hiệp: đếm số liệu của hiệp, hết hiệp gửi lên server/ để Claude bình luận.
 // Server lỗi hoặc chậm thì dùng câu soạn sẵn. Tự hiện banner riêng, không phụ thuộc HUD.
 import { on, emit } from '../events.js';
+import { getDifficulty as aiDifficulty } from './opponent.js';
 
 const SERVER = import.meta.env?.VITE_COMMENTARY_URL ?? 'http://localhost:8787';
 const TIMEOUT_MS = 4000;
@@ -36,6 +37,7 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 function show(text) {
   emit('COMMENTARY', { text });
   if (typeof document === 'undefined') return;
+  if (document.getElementById('commentary')) return; // HUD của Duy đã hiện COMMENTARY, không hiện trùng
   if (!banner) {
     banner = document.createElement('div');
     Object.assign(banner.style, {
@@ -87,7 +89,7 @@ async function onRoundOver(kind, winner, difficulty) {
 export const getRoundStats = () => ({ round, hp, stats });
 export const setCommentaryEnabled = (v) => (enabled = v);
 
-export function startCommentary({ getDifficulty = () => 'normal' } = {}) {
+export function startCommentary({ getDifficulty = aiDifficulty } = {}) {
   on('PUNCH', ({ who }) => stats[who] && stats[who].punches++);
   on('HIT', ({ target, damage, blocked }) => {
     const s = stats[other(target)];
@@ -98,7 +100,7 @@ export function startCommentary({ getDifficulty = () => 'normal' } = {}) {
   });
   on('HP', (v) => (hp = { p1: Math.round(v.p1), p2: Math.round(v.p2) }));
   on('ROUND', ({ round: r, state, winner }) => {
-    if (state === 'start') {
+    if (state === 'start' || state === 'countdown') {
       if (r) round = r;
       stats = blank();
     } else if ((state === 'end' || state === 'ko') && enabled) {
@@ -106,3 +108,6 @@ export function startCommentary({ getDifficulty = () => 'normal' } = {}) {
     }
   });
 }
+
+// main.js gọi initCommentary()
+export const initCommentary = () => startCommentary();

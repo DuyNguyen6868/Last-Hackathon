@@ -45,11 +45,12 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 let bubble = null;
 let hideTimer = null;
 
-export function tauntLine({ round, hp }) {
+// wins: số hiệp đã thắng (game.js gửi kèm ROUND). Không có thì so máu.
+export function tauntLine({ round, hp, wins }) {
   if (!round || round <= 1) return pick(LINES.first);
-  const lead = hp.p2 - hp.p1;
-  if (lead > 10) return pick(LINES.ahead);
-  if (lead < -10) return pick(LINES.behind);
+  const lead = wins ? wins.p2 - wins.p1 : (hp.p2 - hp.p1) / 10;
+  if (lead >= 1) return pick(LINES.ahead);
+  if (lead <= -1) return pick(LINES.behind);
   return pick(LINES.even);
 }
 

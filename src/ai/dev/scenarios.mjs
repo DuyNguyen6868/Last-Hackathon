@@ -1,67 +1,57 @@
-// Kịch bản test né và phản đòn của AI, chạy bằng Node (không cần trình duyệt):
-//   node src/ai/dev/scenarios.mjs              bảng kết quả cho cả 2 luật né × 2 cách AI né
+// Kịch bản test né và phản đòn của AI, chạy với luật thật trong src/game/game.js (không cần trình duyệt):
+//   node src/ai/dev/scenarios.mjs              bảng kết quả
 //   node src/ai/dev/scenarios.mjs --verbose    in thêm diễn biến từng kịch bản
 //   node src/ai/dev/scenarios.mjs --runs 10    số lần chạy mỗi kịch bản (mặc định 3)
 //
-// Game giả ở đây làm theo HUONG_DAN §8.3 (đòn tính sau 250ms), với dodgeAvoids() theo một trong hai luật:
-//   opposite: né R tránh được tay L của đối thủ, né L tránh tay R
-//   same:     né L tránh được tay L của đối thủ, né R tránh tay R
-// Luật của game và DODGE_MAPS của AI phải giống nhau, nếu không AI né sai phía và mất phản đòn.
+// Luật né của game: né theo hướng nào cũng được, chỉ cần đang trong CONFIG.dodgeWindowMs kể từ lúc bắt đầu né.
+// Hướng né của AI (DODGE_MAPS, mặc định 'same') chỉ ảnh hưởng hình ảnh và tay dùng để phản đòn.
 import { on, emit } from '../../events.js';
-import { startOpponent, setDifficulty, setDodgeMap, getLastCounter, DODGE_MAPS } from '../opponent.js';
+import { CONFIG } from '../../config.js';
+import { startMatch } from '../../game/game.js';
+import { startOpponent, setDifficulty, getLastCounter, getDodgeMap } from '../opponent.js';
 
 const args = process.argv.slice(2);
 const VERBOSE = args.includes('--verbose');
 const RUNS = Number(args[args.indexOf('--runs') + 1]) || 3;
 
-const RULES = Object.keys(DODGE_MAPS); // ['opposite', 'same']
-const other = (w) => (w === 'p1' ? 'p2' : 'p1');
+CONFIG.countdownMs = 0; // vào trận ngay, khỏi chờ đếm ngược
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ---- game giả ----
-let rule = 'opposite';
-let st, hp, log, t0;
-const dodgeAvoids = (dir, hand) => DODGE_MAPS[rule][hand] === dir;
+// ---- ghi lại diễn biến ----
+let log = [];
+let t0 = Date.now();
 const t = () => Date.now() - t0;
+const pending = { p1: [], p2: [] }; // các cú đấm đang chờ game tính kết quả
 
-function resetGame() {
-  st = { p1: { guard: false, dodge: null }, p2: { guard: false, dodge: null } };
-  hp = { p1: 100, p2: 100 };
-  log = [];
-  t0 = Date.now();
-}
+on('GUARD', ({ who, on: v }) => log.push({ t: t(), who, ev: 'GUARD', v }));
+on('DODGE', ({ who, dir }) => log.push({ t: t(), who, ev: 'DODGE', dir }));
+// game.js nhận PUNCH trước script này (đăng ký lúc import) và phát ANIM ngay nếu chấp nhận cú đấm,
+// sau đó phát HIT/MISS khi tính xong
+const accepted = { p1: false, p2: false };
+on('ANIM', ({ who, name }) => {
+  if (/^(jab|hook)_/.test(name)) accepted[who] = true;
+});
+on('PUNCH', ({ who, hand, kind }) => {
+  const e = { t: t(), who, ev: 'PUNCH', hand, kind, result: accepted[who] ? 'đang bay' : 'bị game bỏ qua' };
+  accepted[who] = false;
+  if (who === 'p2') e.counter = getLastCounter()?.name;
+  log.push(e);
+  pending[who].push(e);
+});
+const settle = (attacker, result) => {
+  const e = pending[attacker].find((p) => p.result === 'đang bay');
+  if (e) e.result = result;
+};
+on('HIT', ({ attacker, blocked }) => settle(attacker, blocked ? 'blocked' : 'hit'));
+on('MISS', ({ attacker }) => settle(attacker, 'dodged'));
 
-on('GUARD', ({ who, on: v }) => {
-  st[who].guard = v;
-  log.push({ t: t(), who, ev: 'GUARD', v });
-});
-on('DODGE', ({ who, dir }) => {
-  st[who].dodge = dir;
-  log.push({ t: t(), who, ev: 'DODGE', dir });
-});
-on('PUNCH', ({ who, hand, kind, power }) => {
-  const entry = { t: t(), who, ev: 'PUNCH', hand, kind, result: null };
-  if (who === 'p2') entry.counter = getLastCounter()?.name;
-  log.push(entry);
-  setTimeout(() => {
-    const tg = other(who);
-    if (st[tg].dodge && dodgeAvoids(st[tg].dodge, hand)) return (entry.result = 'dodged');
-    const blocked = st[tg].guard;
-    const dmg = (kind === 'hook' ? 10 : 5) * (0.5 + power * 0.5) * (blocked ? 0.2 : 1);
-    hp[tg] = Math.max(0, hp[tg] - dmg);
-    entry.result = blocked ? 'blocked' : 'hit';
-    emit('HIT', { target: tg, damage: dmg, blocked });
-    emit('HP', hp);
-  }, 250);
-});
-
-// p1 đọc được đòn phản: 100ms sau khi p2 ra đòn thì né đúng phía (theo luật của game)
+// p1 đọc được đòn phản: 100ms sau khi p2 ra đòn thì né
 let p1ReadsCounters = false;
-on('PUNCH', ({ who, hand }) => {
+on('PUNCH', ({ who }) => {
   if (who !== 'p2' || !p1ReadsCounters) return;
   setTimeout(() => {
-    emit('DODGE', { who: 'p1', dir: DODGE_MAPS[rule][hand] });
-    setTimeout(() => emit('DODGE', { who: 'p1', dir: null }), 400);
+    emit('DODGE', { who: 'p1', dir: 'L' });
+    setTimeout(() => emit('DODGE', { who: 'p1', dir: null }), 450);
   }, 100);
 });
 
@@ -76,35 +66,31 @@ const SCENARIOS = [
     name: 'Một-hai (L rồi R)',
     run: async () => {
       p1Punch('L');
-      await wait(300);
+      await wait(CONFIG.punchCooldownMs + 30);
       p1Punch('R');
     },
   },
-  {
-    name: 'p1 né được đòn phản',
-    readsCounters: true,
-    run: async () => p1Punch('R'),
-  },
+  { name: 'p1 né được đòn phản', readsCounters: true, run: async () => p1Punch('R') },
 ];
 
 // Ép AI luôn phản xạ bằng né và luôn phản đòn, không tự tấn công, để kết quả lặp lại được
 const FORCED = { react: 1, dodgeBias: 1, counter: 1, aggro: 0, guardUp: 0 };
 
 async function runOnce(sc) {
-  resetGame();
   p1ReadsCounters = !!sc.readsCounters;
-  emit('ROUND', { round: 1, state: 'start' });
-  await wait(150);
+  startMatch();
+  await wait(50); // chờ game sang 'fight'
+  log = [];
+  pending.p1 = [];
+  pending.p2 = [];
   t0 = Date.now();
   await sc.run();
-  await wait(1300);
-  emit('ROUND', { round: 1, state: 'end' });
-  await wait(50);
+  await wait(1600);
   return log.slice();
 }
 
 function summarize(runs) {
-  const s = { p1Punches: 0, p1Dodged: 0, counters: 0, counterHit: 0, counterDodged: 0, names: new Set() };
+  const s = { p1Punches: 0, p1Dodged: 0, counters: 0, counterHit: 0, counterDodged: 0, ignored: 0, names: new Set() };
   for (const events of runs) {
     for (const e of events) {
       if (e.ev !== 'PUNCH') continue;
@@ -116,6 +102,7 @@ function summarize(runs) {
         s.names.add(e.counter);
         if (e.result === 'hit') s.counterHit++;
         if (e.result === 'dodged') s.counterDodged++;
+        if (e.result === 'bị game bỏ qua') s.ignored++;
       }
     }
   }
@@ -135,32 +122,27 @@ function printTimeline(events) {
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '-');
 
 startOpponent({ difficulty: 'hard', taunt: false });
+// game.js so performance.now() với lastPunch = 0; trong Node đồng hồ này bắt đầu từ lúc chạy nên phải chờ một chút
+await wait(CONFIG.punchCooldownMs + 50);
+setDifficulty('hard', FORCED);
 
-for (const gameRule of RULES) {
-  for (const aiMap of RULES) {
-    rule = gameRule;
-    setDodgeMap(aiMap);
-    setDifficulty('hard', FORCED);
-    const match = gameRule === aiMap;
-    console.log(`\n=== Game: ${gameRule} · AI: ${aiMap} ${match ? '✅ khớp' : '❌ lệch'}`);
-    console.log('   kịch bản                  AI né trúng  số đòn phản   đòn phản trúng   p1 né được đòn phản');
-    for (const sc of SCENARIOS) {
-      const runs = [];
-      for (let i = 0; i < RUNS; i++) runs.push(await runOnce(sc));
-      const s = summarize(runs);
-      console.log(
-        `   ${sc.name.padEnd(24)}  ${pct(s.p1Dodged, s.p1Punches).padStart(9)}   ${String(s.counters).padStart(11)}` +
-          `   ${pct(s.counterHit, s.counters).padStart(14)}   ${pct(s.counterDodged, s.counters).padStart(19)}` +
-          `   ${[...s.names].join(', ')}`,
-      );
-      if (VERBOSE && match) printTimeline(runs[0]);
-    }
-  }
+console.log(`Luật thật của game · AI né kiểu '${getDodgeMap()}' · ${RUNS} lần mỗi kịch bản`);
+console.log('   kịch bản                  AI né trúng  số đòn phản   đòn phản trúng   p1 né được   game bỏ qua');
+for (const sc of SCENARIOS) {
+  const runs = [];
+  for (let i = 0; i < RUNS; i++) runs.push(await runOnce(sc));
+  const s = summarize(runs);
+  console.log(
+    `   ${sc.name.padEnd(24)}  ${pct(s.p1Dodged, s.p1Punches).padStart(9)}  ${String(s.counters).padStart(11)}` +
+      `   ${pct(s.counterHit, s.counters).padStart(14)}   ${pct(s.counterDodged, s.counters).padStart(10)}` +
+      `   ${String(s.ignored).padStart(11)}   ${[...s.names].join(', ')}`,
+  );
+  if (VERBOSE) printTimeline(runs[0]);
 }
 
 console.log(`
 Đọc kết quả:
-- Khi khớp, AI né được 100% đòn và phản đòn sau mỗi lần né. Khi lệch, AI né sai phía, bị trúng đòn nên không phản đòn.
-- "p1 né được phản đòn" kiểm tra chiều ngược lại: người chơi né đúng phía thì đòn phản của AI trượt.
-- Chọn luật cho dodgeAvoids() trong game, rồi đặt cùng tên cho AI: initAI({ dodgeMap: '<tên>' }) hoặc ?dodge=<tên>.`);
+- AI né trúng: phần trăm cú đấm của p1 bị AI né (game tính MISS).
+- Đòn phản trúng / p1 né được: kết quả các cú phản đòn của AI khi p1 đứng yên / khi p1 né kịp.
+- Game bỏ qua: cú đấm AI tung ra nhưng game không nhận (quá sát cú trước, đang choáng, đang đỡ). Phải bằng 0.`);
 process.exit(0);
