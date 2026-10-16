@@ -48,7 +48,7 @@
 | Hiển thị 3D | [Three.js](https://threejs.org/), robot dựng từ `BoxGeometry` và `CylinderGeometry` |
 | Logic game | Vòng lặp `requestAnimationFrame` và một event bus tự viết |
 | Đối thủ AI | FSM có trọng số ngẫu nhiên |
-| LLM (tuỳ chọn) | Claude API (`claude-haiku-5-5`) qua proxy Express nhỏ trong `server/` |
+| LLM (tuỳ chọn) | Claude API qua proxy Express nhỏ trong `server/`. Mặc định `claude-opus-5-5` ở effort `low`, có thể đổi sang `claude-haiku-5-5` trong `.env` để nhanh và rẻ hơn |
 | Deploy | Vercel hoặc GitHub Pages (chỉ frontend) |
 
 > **Phương án dự phòng** nếu JS gặp khó: Python 3.12 với `opencv-python`, `mediapipe` và `pygame` làm game 2D. Chỉ chuyển trong 30 phút đầu, sau đó không đổi nữa.
@@ -59,43 +59,52 @@
 
 Yêu cầu: Node 20 trở lên, Chrome hoặc Edge, máy có webcam.
 
-**Duy làm một lần lúc khởi động:**
-```bash
-npm create vite@latest . -- --template vanilla
-npm install three @mediapipe/tasks-vision
-mkdir -p src/vision src/render src/game src/ai server
-git add . && git commit -m "Scaffold project" && git push
-```
+> ✅ **Khung dự án đã có sẵn và chạy được:** game hoàn chỉnh ở mức MVP (bàn phím, webcam, đối thủ AI, máu, hiệp, KO, hiệu ứng, âm thanh, bình luận). Mỗi người clone về là làm tiếp phần của mình, không cần dựng lại.
 
 **Mọi người:**
 ```bash
 git clone <repo-url> && cd Last-Hackathon
 npm install
-npm run dev        # mở http://localhost:5173 và cho phép dùng webcam
+npm run dev        # mở http://localhost:5173
 ```
+- Mở `http://localhost:5173/?autostart` để vào trận ngay, không qua menu.
+- Bấm **"Bật webcam"** ở menu để dùng MediaPipe. Góc phải dưới hiện khung xương và các chỉ số debug (`ext`, `v`, `hook`, `guard`, `dodge`) để chỉnh ngưỡng.
+- Trong console trình duyệt: `DEBUG_EVENTS = true` để log mọi event, `game.f.p2.hp = 1` để test KO.
 
-**Proxy LLM (chỉ Tiến Anh, tuỳ chọn):**
+**Server bình luận LLM (Tiến Anh, tuỳ chọn):**
 ```bash
-cd server && npm init -y && npm install express cors @anthropic-ai/sdk dotenv
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env   # KHÔNG commit file .env
-node index.js
+cp .env.example .env     # điền ANTHROPIC_API_KEY, KHÔNG commit file .env
+npm run server           # chạy ở cổng 8787. Vite đã proxy /api sang cổng này
 ```
+Không chạy server thì game vẫn hiện câu bình luận soạn sẵn.
+
+**Kiểm tra trước khi push:** `npm run build` phải chạy qua không lỗi.
 
 ---
 
 ## 4. Cấu trúc thư mục và quy tắc Git
 
 ```
+index.html             # Duy: khung HTML (HUD, menu, ô webcam)
 src/
-  main.js          # Duy: khởi tạo và nối các module
-  events.js        # Duy: event bus (on/emit)
-  input/keyboard.js# Duy: điều khiển bằng bàn phím
-  game/            # Duy: game state, luật trúng đòn, HUD
-  vision/          # Chiến: webcam, pose, nhận diện hành động
-  render/          # Thành: scene, robot, animation, hiệu ứng, âm thanh
-  ai/              # Tiến Anh: FSM đối thủ, client gọi LLM
-server/            # Tiến Anh: proxy Claude API
+  main.js              # Duy: khởi tạo, nối module, vòng lặp chính
+  events.js            # Duy: event bus (on/emit)
+  config.js            # CHUNG: mọi con số cân bằng game và ngưỡng vision
+  style.css            # Duy: giao diện HUD và menu
+  input/keyboard.js    # Duy: điều khiển bằng bàn phím
+  game/game.js         # Duy: máu, hiệp, luật trúng đòn, KO
+  game/hud.js          # Duy: thanh máu, đồng hồ, banner, bình luận
+  vision/pose.js       # Chiến: webcam, PoseLandmarker, vẽ khung xương
+  vision/detector.js   # Chiến: luật nhận diện đấm, đỡ, né
+  render/scene.js      # Thành: đấu trường, camera, tia lửa, rung màn hình
+  render/robot.js      # Thành: robot hình khối, IK cánh tay, animation
+  render/sfx.js        # Thành: âm thanh tổng hợp bằng WebAudio
+  ai/opponent.js       # Tiến Anh: FSM cho ZEUS, 3 mức khó
+  ai/commentary.js     # Tiến Anh: gọi /api/commentary, có câu dự phòng
+server/index.js        # Tiến Anh: proxy Claude API
+REPOS.md               # Tổng hợp repo tham khảo
 ```
+`config.js` là file chung. Ai sửa số nào thì nhắn nhóm để khỏi conflict.
 
 **Quy tắc Git:**
 - Mỗi người làm trên nhánh riêng: `duy/game`, `chien/vision`, `thanh/render`, `tienanh/ai`.
@@ -129,10 +138,13 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 
 | Event | Payload | Ý nghĩa |
 |---|---|---|
-| `ANIM` | `{ who, name: 'jab_L'\|'jab_R'\|'hook_L'\|'hook_R'\|'guard'\|'dodge_L'\|'dodge_R'\|'hit'\|'ko'\|'idle' }` | Chạy animation |
-| `HIT` | `{ target, damage, blocked: bool }` | Trúng đòn, dùng cho hiệu ứng và âm thanh |
+| `ANIM` | `{ who, name: 'jab_L'\|'jab_R'\|'hook_L'\|'hook_R'\|'guard'\|'dodge_L'\|'dodge_R'\|'hit'\|'ko'\|'idle'\|'reset' }` | Chạy animation (`reset` khi bắt đầu hiệp mới) |
+| `HIT` | `{ attacker, target, damage, blocked: bool, kind }` | Trúng đòn, dùng cho hiệu ứng và âm thanh |
+| `MISS` | `{ attacker, target }` | Đòn bị né |
 | `HP` | `{ p1: 0..100, p2: 0..100 }` | Cập nhật thanh máu |
-| `ROUND` | `{ round, state: 'start'\|'end'\|'ko', winner? }` | Trạng thái hiệp |
+| `TIMER` | `{ seconds }` | Đồng hồ hiệp |
+| `ROUND` | `{ round, state: 'countdown'\|'fight'\|'end'\|'ko'\|'over', winner?, stats?, wins }` | Trạng thái hiệp và trận |
+| `COMMENTARY` | `{ text }` | Câu bình luận hiện trên màn hình |
 
 **Phím mặc định (p1):** `J` jab trái · `K` jab phải · `U` hook trái · `I` hook phải · `L` giữ để đỡ · `A`/`D` né.
 
@@ -140,33 +152,38 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 
 ## 6. Phân công
 
+> Các mục **(đã có khung)** đã chạy được trong code hiện tại. Việc của người phụ trách là **chỉnh cho tốt hơn và test**, không phải viết lại từ đầu.
+
 ### 👑 Duy: trưởng nhóm, ghép code và logic game
-- [ ] Khung dự án, `events.js`, `keyboard.js`, `main.js`
-- [ ] Game state: máu, hiệp (60 giây/hiệp, 3 hiệp), KO
-- [ ] Luật trúng đòn: đòn mất 250ms mới chạm. Đối phương đỡ thì sát thương ×0.2, né đúng hướng thì trượt
-- [ ] Sát thương: jab 5, hook 10, nhân thêm theo `power`
-- [ ] HUD: thanh máu, đồng hồ, màn hình "ROUND 1 / FIGHT! / KO"
-- [ ] Review và merge, chủ trì 2 lần ghép code
+- [x] Khung dự án, `events.js`, `keyboard.js`, `main.js` **(đã có khung)**
+- [x] Game state: máu, 3 hiệp × 60 giây, KO, thắng theo số hiệp **(đã có khung)**
+- [x] Luật trúng đòn: đòn mất 250ms mới chạm, đỡ thì sát thương ×0.2, né trong 650ms đầu thì trượt, bị trúng thì choáng 220ms **(đã có khung)**
+- [x] HUD: thanh máu, đồng hồ, cúp thắng hiệp, banner ROUND / FIGHT! / K.O. **(đã có khung)**
+- [ ] Chơi thử nhiều lần và cân bằng các số trong `config.js` (sát thương, thời gian hiệp)
+- [ ] *(Nếu kịp)* combo jab-jab-hook gây thêm sát thương, chế độ 2 người chơi (p2 dùng phím mũi tên)
+- [ ] Review và merge, chủ trì ghép code, deploy lên Vercel hoặc GitHub Pages
 
 ### 👁️ Chiến: vision
-- [ ] Bật webcam và chạy PoseLandmarker ở chế độ `VIDEO`
-- [ ] Hiệu chỉnh 3 giây đầu: đo chiều dài tay và vị trí đứng thủ thế
-- [ ] Làm mượt tín hiệu (EMA), nhận ra **đấm, đỡ, né** rồi `emit` theo format ở mục 5
-- [ ] Overlay khung xương lên video nhỏ ở góc màn hình (đẹp khi demo)
-- [ ] Chỉnh ngưỡng với **cả 4 người trong nhóm** và ở nhiều mức ánh sáng
+- [x] Webcam, PoseLandmarker chế độ `VIDEO`, overlay khung xương, chỉ số debug **(đã có khung)**
+- [x] Luật đấm (độ duỗi tay + tốc độ cổ tay), hook (khuỷu cao + quét ngang), đỡ, né, làm mượt EMA **(đã có khung)**
+- [ ] **Việc quan trọng nhất:** đứng trước cam, xem các chỉ số debug, chỉnh ngưỡng `CONFIG.vision` với **cả 4 người** ở nhiều mức ánh sáng
+- [ ] Kiểm tra chiều trái/phải: tay trái người chơi phải khớp với tay robot hiện bên trái màn hình
+- [ ] *(Nếu kịp)* nút "Hiệu chỉnh lại" gọi `detector.recalibrate()`, cảnh báo khi người chơi đứng quá gần hoặc quá xa
 
 ### 🤖 Thành: 3D và hiệu ứng
-- [ ] Scene: sàn đài, 4 cột và dây đài, đèn spotlight, camera sau lưng p1 hơi chéo
-- [ ] Hàm `createRobot(color)` gồm thân, đầu, 2 tay (vai, khuỷu, găng); p1 màu xanh, p2 màu đỏ
-- [ ] Animation bằng tween đơn giản (lerp), lắng nghe `ANIM`
-- [ ] Hiệu ứng khi `HIT`: tia lửa, rung camera, đèn robot nháy đỏ
-- [ ] Âm thanh: tiếng đấm, đỡ, chuông, KO (lấy từ freesound hoặc mixkit)
+- [x] Đấu trường, 4 cột, 3 tầng dây, đèn spotlight và đèn viền xanh/đỏ **(đã có khung)**
+- [x] Robot hình khối, tay 2 đoạn giải bằng IK, animation jab, hook, đỡ, né, trúng đòn, KO **(đã có khung)**
+- [x] Tia lửa, rung camera, robot nháy đỏ khi trúng, âm thanh tổng hợp bằng WebAudio **(đã có khung)**
+- [ ] Chỉnh góc camera (`camBase`, `lookAt` trong `scene.js`) để thấy rõ cả hai robot
+- [ ] Làm robot ngầu hơn: thêm chi tiết như ống xả, đèn ngực, vai giáp. Hiện số sát thương bay lên khi trúng đòn
+- [ ] *(Nếu kịp)* thay âm thanh tổng hợp bằng file thật, thêm tiếng khán giả
 
 ### 🧠 Tiến Anh: đối thủ AI, LLM và pitch
-- [ ] FSM cho p2 với các trạng thái `IDLE → APPROACH → ATTACK / GUARD / DODGE → RECOVER`
-- [ ] Phản ứng theo p1: p1 vừa đấm thì có xác suất đỡ hoặc né. p1 đang đỡ lâu thì dùng hook
-- [ ] 3 mức khó (Easy/Normal/Hard) bằng cách đổi tốc độ phản ứng và xác suất
-- [ ] *(Nếu kịp)* `server/` proxy Claude: giữa hiệp gửi số liệu (số đòn, tỉ lệ trúng, máu), nhận về 1–2 câu bình luận và hiện lên màn hình
+- [x] FSM cho ZEUS: phản ứng khi p1 vừa đấm (đỡ hoặc né), dùng hook khi p1 đỡ lâu, combo, thủ nhiều hơn khi máu thấp, 3 mức khó **(đã có khung)**
+- [x] `server/index.js` gọi Claude để bình luận sau mỗi hiệp, `ai/commentary.js` có câu dự phòng **(đã có khung)**
+- [ ] Lấy API key, chạy `npm run server`, thử và chỉnh prompt bình luận cho hay hơn
+- [ ] Cân bằng `DIFFICULTY` trong `opponent.js` để Easy dễ thắng, Hard khó thật
+- [ ] *(Nếu kịp)* LLM làm huấn luyện viên cho ZEUS: giữa hiệp trả về JSON chiến thuật như `{"aggro":0.7,"favor":"hook"}` (xem llm-colosseum trong [REPOS.md](REPOS.md))
 - [ ] Slide pitch (5–6 slide), kịch bản demo, **quay video dự phòng** lúc 3:30
 
 ---
@@ -177,11 +194,11 @@ T = giờ bắt đầu. Đặt báo thức cho từng mốc.
 
 | Mốc | Duy | Chiến | Thành | Tiến Anh |
 |---|---|---|---|---|
-| **0:00–0:20** | Cả nhóm đọc file này, chốt phạm vi và format sự kiện. Duy push khung dự án | | | |
-| **0:20–1:00** | Event bus, bàn phím, máu | Hiện khung xương trên webcam | Đấu trường và robot đứng yên | Khung FSM, log ra console |
-| **1:00–2:00** | Luật trúng đòn, KO, HUD | Nhận diện đấm, đỡ, né | Animation đấm, đỡ, trúng đòn | Đối thủ AI đánh qua event |
-| **2:00–2:20** | 🔗 **GHÉP LẦN 1 (bắt buộc):** webcam, robot, đối thủ và KO chạy cùng nhau | | | |
-| **2:20–3:15** | Màn hình hiệp/KO, sửa bug | Chỉnh ngưỡng, phân biệt hook | Hiệu ứng, âm thanh | Mức khó, LLM bình luận |
+| **0:00–0:20** | Cả nhóm clone, `npm install`, `npm run dev`, mỗi người chơi thử 1 trận bằng bàn phím và 1 trận bằng webcam | | | |
+| **0:20–1:00** | Cân bằng `config.js`, ghi lại bug | Chỉnh ngưỡng vision với chính mình | Chỉnh camera, làm robot đẹp hơn | Chạy server LLM, chỉnh prompt |
+| **1:00–2:00** | Combo hoặc 2 người chơi, deploy thử | Chỉnh ngưỡng với cả 4 người, sửa trái/phải | Số sát thương, chi tiết robot | Cân bằng độ khó, viết slide |
+| **2:00–2:20** | 🔗 **GHÉP LẦN 1 (bắt buộc):** merge tất cả nhánh, chơi thử trọn trận bằng webcam | | | |
+| **2:20–3:15** | Sửa bug sau ghép | Ổn định nhận diện hook | Âm thanh, hiệu ứng | LLM huấn luyện viên (nếu kịp) |
 | **3:15** | 🧊 **ĐÓNG BĂNG TÍNH NĂNG**, từ đây chỉ sửa bug | | | |
 | **3:15–3:45** | Deploy và test trên máy demo | Test với nhiều người | Đánh bóng hình ảnh | Chốt slide, quay video dự phòng |
 | **3:45–4:00** | 🎤 Tập demo 2 lần | | | |
@@ -191,6 +208,8 @@ T = giờ bắt đầu. Đặt báo thức cho từng mốc.
 ---
 
 ## 8. Ghi chú kỹ thuật cho từng phần
+
+> Các đoạn code dưới đây là **bản rút gọn để hiểu ý tưởng**. Code thật, đầy đủ và đã chạy nằm trong: `src/vision/detector.js`, `src/render/robot.js`, `src/game/game.js`, `src/ai/opponent.js`. Ngưỡng thật nằm trong `src/config.js`. Ví dụ, detector thật dùng **world landmarks** (đơn vị mét) để nhận đấm, khác với bản rút gọn.
 
 ### 8.1 Vision (Chiến)
 
@@ -310,12 +329,12 @@ function tick(p1State) {
 
 ## 11. Repo tham khảo
 
-> Các repo dưới đây lấy từ kết quả tìm kiếm web và chưa được kiểm tra kỹ. Mở ra xem trước khi dùng.
+> 👉 **Bản tổng hợp chi tiết** (số sao, license, cách hoạt động, áp dụng gì cho nhóm) nằm ở [REPOS.md](REPOS.md). Bảng dưới chỉ là tóm tắt.
 
 | Repo | Dùng để làm gì |
 |---|---|
 | [google-ai-edge/mediapipe-samples](https://github.com/google-ai-edge/mediapipe-samples) | ⭐ Điểm xuất phát cho vision: sample Pose Landmarker chính thức (web và Python) |
-| [IvanGael/BoxingWithML](https://github.com/IvanGael/BoxingWithML) | Logic đếm cú đấm bằng MediaPipe và OpenCV, có độ trễ chống đếm trùng |
+| [iv4n-ga6l/BoxingWithML](https://github.com/iv4n-ga6l/BoxingWithML) | Logic đếm cú đấm bằng MediaPipe và OpenCV, có độ trễ chống đếm trùng |
 | [ra101/Pose2Input-MK9](https://github.com/ra101/Pose2Input-MK9) | Chuyển tư thế thành phím bấm để chơi Mortal Kombat, đúng kiểu ánh xạ nhóm cần |
 | [suuuumcaa/cvgaming](https://github.com/suuuumcaa/cvgaming) | Game đấm bốc "Punch a Bunch": các tư thế đứng, đỡ, hook trái/phải |
 | [OpenGenerativeAI/llm-colosseum](https://github.com/OpenGenerativeAI/llm-colosseum) | LLM chơi Street Fighter III: tham khảo prompt và cách trả hành động dạng JSON |
