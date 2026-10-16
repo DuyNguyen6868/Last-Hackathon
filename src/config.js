@@ -12,6 +12,7 @@ export const CONFIG = {
   hitStunMs: 220, // bị trúng đòn thì không ra đòn được trong khoảng này
   dodgeWindowMs: 1000, // né chỉ có hiệu lực trong khoảng này sau khi bắt đầu né (phải dài hơn windupMs + hitDelayMs của AI)
   damage: { jab: 5, hook: 10 },
+  hitRange: { jab: 2.15, hook: 2.45 },
   guardMultiplier: 0.2,
 
   // Combo: các đòn liên tiếp, đổi tay luân phiên, mỗi đòn cách nhau không quá comboGapMs.
@@ -42,5 +43,8 @@ export const CONFIG = {
     guardOff: 0.95,
     dodgeOn: 0.28, // mũi lệch khỏi vị trí gốc, tính theo bề rộng vai
     dodgeOff: 0.16,
+    calibrationFrames: 24,
+    range: { shoulderWidthMin: 0.12, shoulderWidthMax: 0.48 },
+    movement: { minLandmarkVisibility: 0.45, deadZone: 0.12, fullLean: 0.42, forwardDeadZone: 0.11, fullForward: 0.38, smoothing: 0.38 },
   },
 };

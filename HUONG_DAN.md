@@ -137,6 +137,7 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 | `PUNCH` | `{ who: 'p1'\|'p2', hand: 'L'\|'R', kind: 'jab'\|'hook', power: 0..1 }` | Ra đòn |
 | `GUARD` | `{ who, on: true\|false }` | Bật/tắt đỡ |
 | `DODGE` | `{ who, dir: 'L'\|'R'\|null }` | Né sang trái/phải, `null` là về giữa |
+| `MOVE` | `{ who, x: -1..1, z: -1..1 }` | Di chuyển trên sàn; bàn phím, webcam và AI điều khiển robot |
 
 **Game → Render / HUD:**
 
@@ -152,7 +153,7 @@ export const emit = (type, payload = {}) => (handlers[type] || []).forEach(fn =>
 | `TELEGRAPH` | `{ who, hand, kind, ms }` | AI đang lấy đà, `ms` sau sẽ ra đòn. Render làm găng sáng cam và phát tiếng nạp lực |
 | `COMBO` | `{ who, target, name, damage }` | Combo hoặc phản đòn trúng (`name` có thể là `'COUNTER + ONE-TWO'`) |
 
-**Phím mặc định (p1):** `J` jab trái · `K` jab phải · `U` hook trái · `I` hook phải · `L` giữ để đỡ · `A`/`D` né (bấm khi thấy găng ZEUS sáng cam).
+**Phím mặc định (p1):** `W`/`S` tiến/lùi · `A`/`D` chạy trái/phải · `Q`/`E` né · `J`/`K` jab · `U`/`I` hook · `L` giữ để đỡ.
 
 ### Combo và phản đòn
 

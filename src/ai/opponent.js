@@ -86,6 +86,10 @@ let round = 1;
 let hp = { p1: 100, p2: 100 };
 let wins = null;
 let tauntEnabled = true;
+const positions = {
+  p1: { x: -0.55, z: 2.2 },
+  p2: { x: 0.55, z: -2.2 },
+};
 
 const p1 = { guard: false, guardSince: 0, dodge: null, lastPunch: 0, pendingUntil: 0 };
 
@@ -261,6 +265,21 @@ function doubleSlip(p1Hand) {
 function tick() {
   if (!active && state !== 'CELEBRATE' && state !== 'TAUNT') return;
   const now = Date.now();
+  if (active) {
+    const dx = positions.p1.x - positions.p2.x;
+    const dz = positions.p1.z - positions.p2.z;
+    const distance = Math.hypot(dx, dz) || 1;
+    const towardX = dx / distance;
+    const towardZ = dz / distance;
+    const approach = distance > 1.75 ? 1 : distance < 1.3 ? -0.8 : 0;
+    const orbit = Math.sin(now / 950) * 0.42;
+    const moveX = towardX * approach - towardZ * orbit;
+    const moveZ = towardZ * approach + towardX * orbit;
+    const moveLength = Math.hypot(moveX, moveZ) || 1;
+    emit('MOVE', { who: ME, x: moveX / moveLength, z: moveZ / moveLength, source: 'ai' });
+  } else {
+    emit('MOVE', { who: ME, x: 0, z: 0, source: 'ai' });
+  }
   const done = now >= stateUntil;
 
   switch (state) {
@@ -286,6 +305,11 @@ function tick() {
 
     case 'APPROACH': {
       if (!done || now < stunUntil) break; // đang khựng vì trúng đòn thì chưa ra đòn
+      const distance = Math.hypot(positions.p1.x - positions.p2.x, positions.p1.z - positions.p2.z);
+      if (distance > CONFIG.hitRange.hook) {
+        enter('APPROACH', 120);
+        break;
+      }
       const ready = now - lastAttack >= cfg.cooldownMs;
       // p1 thủ lâu thì AI hăng hơn để phá thủ bằng hook; p1 vừa đấm xong (tay đang duỗi) là lúc phản đòn
       const opening = now - p1.lastPunch < 500;
@@ -397,6 +421,10 @@ export function startOpponent({ difficulty = 'normal', debug: dbg = false, taunt
     }
   });
   on('HP', (v) => (hp = v));
+  on('POSITION', ({ p1: p1Position, p2: p2Position }) => {
+    if (p1Position) positions.p1 = p1Position;
+    if (p2Position) positions.p2 = p2Position;
+  });
   // game.js: countdown → fight → end | ko → over. Vẫn nhận 'start' theo HUONG_DAN (dùng trong kịch bản test).
   on('ROUND', ({ round: r, state: s, winner, wins: w }) => {
     if (r) round = r;

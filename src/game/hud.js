@@ -37,6 +37,10 @@ export function initHud({ onMatchOver } = {}) {
     $('timer').textContent = seconds;
   });
 
+  on('MISS', ({ attacker, reason }) => {
+    if (attacker === 'p1' && reason === 'out_of_range') banner('NGOÀI TẦM ĐÁNH — HÃY TIẾN LẠI GẦN', 700);
+  });
+
   on('ROUND', ({ round, state, winner, wins }) => {
     $('round-label').textContent = `ROUND ${round}`;
     if (wins) renderWins(wins);
@@ -58,7 +62,8 @@ export function initHud({ onMatchOver } = {}) {
   });
 
   // Né/đỡ thành công thì nhắc người chơi phản đòn
-  on('MISS', ({ target }) => {
+  on('MISS', ({ target, reason }) => {
+    if (reason === 'out_of_range') return;
     pop(target, target === 'p1' ? 'NÉ!<small>Phản đòn ngay ×1.5</small>' : 'NÉ!');
   });
   on('HIT', ({ target, blocked }) => {

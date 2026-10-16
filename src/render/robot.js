@@ -38,6 +38,7 @@ export function createRobot(id) {
   bob.add(root);
 
   // Chân (chân trái đứng trước một chút như tư thế võ sĩ)
+  const legs = [];
   for (const s of [1, -1]) {
     const leg = new THREE.Group();
     leg.position.set(s * 0.32, 0, s > 0 ? 0.14 : -0.08);
@@ -46,6 +47,7 @@ export function createRobot(id) {
     box(0.3, 0.5, 0.34, dark, 0, 0.3, 0, leg);
     box(0.4, 0.16, 0.66, trim, 0, 0.08, 0.1, leg);
     root.add(leg);
+    legs.push(leg);
   }
 
   // Hông
@@ -141,6 +143,7 @@ export function createRobot(id) {
     flash: 0,       // nháy khi trúng đòn
     flashColor: new THREE.Color(0xff2a3d),
     charge: { L: null, R: null }, // lấy đà: { t0, dur } theo từng tay
+    walkAmount: 0,
     channels,
     // Các object mà tween có thể đang điều khiển, để huỷ khi reset
     targets: new Set(Object.values(channels).map((c) => c[0])),
@@ -148,6 +151,10 @@ export function createRobot(id) {
     setChannel(name, value) {
       const [obj, key] = channels[name];
       obj[key] = value;
+    },
+
+    setWalking(amount) {
+      this.walkAmount = Math.max(0, Math.min(1, amount));
     },
 
     applyPose(pose) {
@@ -197,7 +204,10 @@ export function createRobot(id) {
         arms[s].shell.visible = true;
         arms[s].shell.material.opacity = (0.12 + 0.4 * level) * pulse;
       }
-      bob.position.y = this.ko ? 0 : Math.abs(Math.sin(t * 0.0032 + phase)) * 0.035;
+      const stride = Math.sin(t * 0.012 + phase) * 0.48 * this.walkAmount;
+      legs[0].rotation.x = stride;
+      legs[1].rotation.x = -stride;
+      bob.position.y = this.ko ? 0 : Math.abs(Math.sin(t * (this.walkAmount ? 0.012 : 0.0032) + phase)) * (0.035 + this.walkAmount * 0.035);
     },
   };
 

@@ -77,6 +77,27 @@ export function initRender({ container = document.body, bus, bloom = true } = {}
   let pushPoint = new THREE.Vector3();
   const timers = [];
   const later = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const moves = {
+    p1: { vision: { x: 0, z: 0 }, keyboard: { x: 0, z: 0 }, keyboardActive: false },
+    p2: { ai: { x: 0, z: 0 } },
+  };
+  const move = { x: 0, z: 0 };
+  let movementEnabled = false;
+
+  bus.on('MOVE', ({ who, x = 0, z = 0, source = 'vision', active = true }) => {
+    if (who === 'p1') {
+      const input = source === 'keyboard' ? moves.p1.keyboard : moves.p1.vision;
+      input.x = Math.max(-1, Math.min(1, x));
+      input.z = Math.max(-1, Math.min(1, z));
+      if (source === 'keyboard') moves.p1.keyboardActive = active;
+      const selected = moves.p1.keyboardActive ? moves.p1.keyboard : moves.p1.vision;
+      move.x = selected.x;
+      move.z = selected.z;
+    } else if (who === 'p2') {
+      moves.p2.ai.x = Math.max(-1, Math.min(1, x));
+      moves.p2.ai.z = Math.max(-1, Math.min(1, z));
+    }
+  });
 
   bus.on('ANIM', ({ who, name }) => {
     const r = robots[who];
@@ -147,6 +168,13 @@ export function initRender({ container = document.body, bus, bloom = true } = {}
   // state theo game.js: countdown -> fight -> end | ko -> over (cũng nhận 'start' theo HUONG_DAN.md)
   bus.on('ROUND', ({ state }) => {
     if (state === 'countdown' || state === 'start') {
+      movementEnabled = false;
+      move.x = 0;
+      move.z = 0;
+      moves.p1.keyboardActive = false;
+      moves.p2.ai = { x: 0, z: 0 };
+      robots.p1.group.position.set(-0.55, 0, 2.2);
+      robots.p2.group.position.set(0.55, 0, -2.2);
       for (const r of Object.values(robots)) {
         tweens.cancelTargets(r.targets);
         r.reset();
@@ -155,10 +183,17 @@ export function initRender({ container = document.body, bus, bloom = true } = {}
       pushTarget = 0;
       if (state === 'start') sfx.bell(1);
     } else if (state === 'fight') {
+      movementEnabled = true;
       sfx.bell(1);
     } else if (state === 'end') {
+      movementEnabled = false;
+      move.x = 0;
+      move.z = 0;
       sfx.bell(3);
     } else if (state === 'ko') {
+      movementEnabled = false;
+      move.x = 0;
+      move.z = 0;
       later(900, () => sfx.bell(3));
     }
   });
@@ -178,6 +213,34 @@ export function initRender({ container = document.body, bus, bloom = true } = {}
     const dt = real * scale;
 
     tweens.update(dt);
+    const p1 = robots.p1;
+    const moveLength = movementEnabled ? Math.hypot(move.x, move.z) : 0;
+    if (moveLength > 0) {
+      const scale = Math.min(1, moveLength);
+      p1.group.position.x += (move.x / moveLength) * 2.1 * scale * real / 1000;
+      p1.group.position.z += (move.z / moveLength) * 2.1 * scale * real / 1000;
+      p1.group.position.x = THREE.MathUtils.clamp(p1.group.position.x, -3.4, 3.4);
+      p1.group.position.z = THREE.MathUtils.clamp(p1.group.position.z, 0.2, 4.2);
+    }
+    p1.setWalking(moveLength);
+    const p2 = robots.p2;
+    const enemyMove = movementEnabled ? moves.p2.ai : { x: 0, z: 0 };
+    const enemyMoveLength = Math.hypot(enemyMove.x, enemyMove.z);
+    if (enemyMoveLength > 0) {
+      p2.group.position.x += (enemyMove.x / enemyMoveLength) * 1.7 * real / 1000;
+      p2.group.position.z += (enemyMove.z / enemyMoveLength) * 1.7 * real / 1000;
+      p2.group.position.x = THREE.MathUtils.clamp(p2.group.position.x, -3.4, 3.4);
+      p2.group.position.z = THREE.MathUtils.clamp(p2.group.position.z, -4.2, -0.2);
+    }
+    p2.setWalking(enemyMoveLength);
+    const faceP1 = new THREE.Vector2(p1.group.position.x - p2.group.position.x, p1.group.position.z - p2.group.position.z);
+    p2.group.rotation.y = Math.atan2(faceP1.x, faceP1.y);
+    const faceP2 = new THREE.Vector2(p2.group.position.x - p1.group.position.x, p2.group.position.z - p1.group.position.z);
+    p1.group.rotation.y = Math.atan2(faceP2.x, faceP2.y);
+    bus.emit('POSITION', {
+      p1: { x: p1.group.position.x, z: p1.group.position.z },
+      p2: { x: p2.group.position.x, z: p2.group.position.z },
+    });
     for (const r of Object.values(robots)) r.update(dt, now);
     fx.update(dt);
 

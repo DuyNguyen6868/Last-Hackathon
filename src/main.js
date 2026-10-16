@@ -13,6 +13,7 @@ const $ = (id) => document.getElementById(id);
 
 const scene = createScene($('arena'));
 const opponent = createOpponent();
+let visionSession = null;
 initSfx();
 initKeyboard();
 initCommentary();
@@ -39,10 +40,8 @@ $('btn-cam').addEventListener('click', async () => {
   btn.disabled = true;
   $('cam').classList.remove('hidden');
   try {
-    await startVision({
-      video: $('cam-video'),
-      canvas: $('cam-canvas'),
-      debugEl: $('cam-debug'),
+    visionSession = await startVision({
+      video: $('cam-video'), canvas: $('cam-canvas'), debugEl: $('cam-debug'),
       onStatus: (s) => ($('cam-status').textContent = s),
     });
     btn.textContent = '📷 Webcam đang bật';
@@ -52,6 +51,12 @@ $('btn-cam').addEventListener('click', async () => {
     $('cam').classList.add('hidden');
     btn.disabled = false;
   }
+});
+
+$('btn-calibrate').addEventListener('click', () => {
+  if (!visionSession) return;
+  visionSession.detector.recalibrate();
+  $('cam-status').textContent = 'Đang hiệu chỉnh: đứng thẳng, nhìn về camera và giữ yên một chút.';
 });
 
 // Vòng lặp chính

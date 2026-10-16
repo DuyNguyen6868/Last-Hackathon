@@ -71,6 +71,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 #cam video, #cam canvas { width: 100%; display: block; transform: scaleX(-1); }
 #cam canvas { position: absolute; inset: 0; height: 100%; }
 #cam-debug { position: absolute; left: 0; bottom: 0; margin: 0; padding: 4px 6px; font-size: 10px; background: rgba(0,0,0,0.6); color: #8f8; }
+#btn-calibrate { position: absolute; top: 6px; left: 6px; padding: 5px 8px; font-size: 11px; background: rgba(10,14,22,.86); }
 
 /* Menu */
 #menu {

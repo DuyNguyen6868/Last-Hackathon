@@ -4,7 +4,7 @@ import { CONFIG } from '../config.js';
 
 export const other = (who) => (who === 'p1' ? 'p2' : 'p1');
 
-const newFighter = () => ({
+const newFighter = (who) => ({
   hp: CONFIG.maxHP,
   guard: false,
   guardSince: 0,
@@ -14,6 +14,7 @@ const newFighter = () => ({
   windupAt: -Infinity, // lần gần nhất lấy đà (TELEGRAPH)
   lastPunch: -Infinity,
   stunnedUntil: 0,
+  position: who === 'p1' ? { x: -0.55, z: 2.2 } : { x: 0.55, z: -2.2 },
   seq: [], // chuỗi đòn gần nhất để nhận combo: { kind, hand, t, result }
   counterUntil: 0, // còn trong cửa sổ phản đòn
   stats: { thrown: 0, landed: 0, blocked: 0, missed: 0, combos: 0, counters: 0 },
@@ -50,7 +51,7 @@ export const game = {
   round: 0,
   wins: { p1: 0, p2: 0 },
   timeLeft: CONFIG.roundSeconds,
-  f: { p1: newFighter(), p2: newFighter() },
+  f: { p1: newFighter('p1'), p2: newFighter('p2') },
 };
 
 const timers = [];
@@ -66,7 +67,7 @@ export function startMatch() {
 
 function nextRound() {
   game.round++;
-  game.f = { p1: newFighter(), p2: newFighter() };
+  game.f = { p1: newFighter('p1'), p2: newFighter('p2') };
   game.timeLeft = CONFIG.roundSeconds;
   game.phase = 'countdown';
   emit('ANIM', { who: 'p1', name: 'reset' });
@@ -140,6 +141,15 @@ function resolveHit(who, entry, power) {
     return;
   }
 
+  const distance = Math.hypot(target.position.x - me.position.x, target.position.z - me.position.z);
+  if (distance > CONFIG.hitRange[kind]) {
+    entry.result = 'missed';
+    me.seq = [];
+    me.stats.missed++;
+    emit('MISS', { attacker: who, target: t, reason: 'out_of_range', distance });
+    return;
+  }
+
   const blocked = target.guard;
   entry.result = blocked ? 'blocked' : 'landed';
   me.stats[blocked ? 'blocked' : 'landed']++;
@@ -183,6 +193,11 @@ function resolveHit(who, entry, power) {
   emit('HP', hpPayload());
   if (target.hp <= 0) endRound(who);
 }
+
+on('POSITION', ({ p1, p2 }) => {
+  if (p1) game.f.p1.position = p1;
+  if (p2) game.f.p2.position = p2;
+});
 
 on('PUNCH', ({ who, hand, kind, power = 0.7 }) => {
   const me = game.f[who];

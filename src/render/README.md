@@ -31,7 +31,7 @@ Lưu ý cho Game (Duy):
 ## Chạy demo độc lập (không cần game thật)
 
 Khi dự án đã có Vite: `npm run dev` rồi mở `http://localhost:5173/src/render/demo.html`.
-Phím: `J/K` jab · `U/I` hook · giữ `L` đỡ · `A/D` né · `1/2/3` trúng đòn · `O/P` KO · `R` hiệp mới · `T` AI giả.
+Phím: `W/A/S/D` di chuyển · `J/K` jab · `U/I` hook · giữ `L` đỡ · `Q/E` né · `1/2/3` trúng đòn · `O/P` KO · `R` hiệp mới · `T` AI giả.
 
 ## Cấu trúc
 
