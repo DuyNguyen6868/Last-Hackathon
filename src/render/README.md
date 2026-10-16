@@ -47,3 +47,8 @@ Phím: `J/K` jab · `U/I` hook · giữ `L` đỡ · `A/D` né · `1/2/3` trúng
 | `audio.js` | Âm thanh tổng hợp bằng WebAudio (không cần file) |
 
 Chỉnh nhanh: tư thế/đòn đánh trong `poses.js` và `anim.js`; màu robot trong `PALETTES` (`robot.js`); độ sáng đèn trong `scene.js`.
+
+## Xem nhanh tất cả tư thế (không cần chơi game)
+
+`npm run dev` rồi mở `http://localhost:5173/src/render/pose-sheet.html?who=p1` (hoặc `who=p2`, thêm `&view=side` hoặc `view=front`).
+Trang tua animation theo bước thời gian cố định và vẽ 10 tư thế (idle, guard, jab, hook, né, trúng đòn, KO) thành một bảng, nên chỉnh `poses.js` / `anim.js` xong chỉ cần tải lại để xem.

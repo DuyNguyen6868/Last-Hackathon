@@ -8,24 +8,26 @@ import { BASE } from './poses.js';
 // glow = màu mắt/viền sáng (cũng là màu tia lửa), accent = đèn phụ.
 export const PALETTES = {
   p1: { body: 0x9aa4b4, trim: 0x3b4452, dark: 0x14171d, glow: 0x35c8ff, accent: 0xff7a2a },
-  p2: { body: 0x2b2d35, trim: 0x5a606c, dark: 0x08090b, glow: 0xff2a3d, accent: 0x35ff7a },
+  p2: { body: 0x3a3d48, trim: 0x6d7482, dark: 0x0c0d11, glow: 0xff2a3d, accent: 0x35ff7a },
 };
 
 // Kích thước từng nhân vật (đơn vị mét, robot cao khoảng 2.5)
 const SPECS = {
-  p1: { scale: 1, chestW: 1.2, chestH: 0.85, chestD: 0.62, shoulderX: 0.8, padW: 0.36, padH: 0.3, padD: 0.5, armR: 0.12, fist: 0.4, legX: 0.3, legW: 0.34, legD: 0.38, headW: 0.46, headH: 0.42, headD: 0.46, headZ: 0 },
-  p2: { scale: 1.1, chestW: 1.62, chestH: 1.0, chestD: 0.84, shoulderX: 1.06, padW: 0.62, padH: 0.52, padD: 0.82, armR: 0.17, fist: 0.52, legX: 0.4, legW: 0.46, legD: 0.48, headW: 0.52, headH: 0.4, headD: 0.54, headZ: 0.12 },
+  p1: { scale: 1, leg: 1, chestW: 1.2, chestH: 0.85, chestD: 0.62, shoulderX: 0.8, padW: 0.36, padH: 0.3, padD: 0.5, armR: 0.12, fist: 0.4, legX: 0.3, legW: 0.34, legD: 0.38, headW: 0.46, headH: 0.42, headD: 0.46, headZ: 0 },
+  p2: { scale: 1.08, leg: 1.2, chestW: 1.62, chestH: 1.0, chestD: 0.84, shoulderX: 1.06, padW: 0.62, padH: 0.52, padD: 0.82, armR: 0.17, fist: 0.52, legX: 0.4, legW: 0.46, legD: 0.48, headW: 0.52, headH: 0.4, headD: 0.54, headZ: 0.12 },
 };
 
 // Chân: đùi và cẳng chân dài bằng nhau. Hông cách mắt cá 1.0, mắt cá cách sàn 0.1.
 const THIGH = 0.5;
 const SHIN = 0.5;
 const ANKLE_Y = 0.1;
-const HIP_Y = ANKLE_Y + THIGH + SHIN;
 
 export function createRobot(id) {
   const pal = PALETTES[id];
   const sp = SPECS[id];
+  const thigh = THIGH * sp.leg;
+  const shin = SHIN * sp.leg;
+  const hipY = ANKLE_Y + thigh + shin;
   const glowMats = [];
 
   const metal = (color, rough = 0.4, metalness = 0.6) =>
@@ -78,22 +80,22 @@ export function createRobot(id) {
   const legs = {};
   for (const [side, s] of [['L', 1], ['R', -1]]) {
     const hip = new THREE.Group();
-    hip.position.set(s * sp.legX, HIP_Y, s > 0 ? 0.14 : -0.08); // chân trái đứng trước như võ sĩ
+    hip.position.set(s * sp.legX, hipY, s > 0 ? 0.14 : -0.08); // chân trái đứng trước như võ sĩ
     root.add(hip);
     ball(sp.legW * 0.5, trim, 0, 0, 0, hip);
-    rbox(sp.legW, THIGH * 0.95, sp.legD, body, 0, -THIGH * 0.5, 0, hip, 0.06);
+    rbox(sp.legW, thigh * 0.95, sp.legD, body, 0, -thigh * 0.5, 0, hip, 0.06);
     rbox(sp.legW * 0.8, 0.12, 0.05, accentMat, 0, -0.14, sp.legD * 0.5 + 0.01, hip, 0.01);
 
     const knee = new THREE.Group();
-    knee.position.y = -THIGH;
+    knee.position.y = -thigh;
     hip.add(knee);
     ball(sp.legW * 0.46, trim, 0, 0, 0.02, knee);
     rbox(sp.legW * 0.7, 0.16, 0.14, trim, 0, 0.02, sp.legD * 0.5, knee, 0.05); // nắp gối
-    rbox(sp.legW * 0.82, SHIN * 0.92, sp.legD * 0.88, dark, 0, -SHIN * 0.5, 0, knee, 0.05);
-    rbox(sp.legW * 0.9, SHIN * 0.5, 0.06, trim, 0, -SHIN * 0.42, sp.legD * 0.44 + 0.02, knee, 0.03); // giáp cẳng chân
+    rbox(sp.legW * 0.82, shin * 0.92, sp.legD * 0.88, dark, 0, -shin * 0.5, 0, knee, 0.05);
+    rbox(sp.legW * 0.9, shin * 0.5, 0.06, trim, 0, -shin * 0.42, sp.legD * 0.44 + 0.02, knee, 0.03); // giáp cẳng chân
 
     const foot = new THREE.Group();
-    foot.position.y = -SHIN;
+    foot.position.y = -shin;
     knee.add(foot);
     rbox(sp.legW + 0.08, 0.13, 0.72, trim, 0, -0.04, 0.14, foot, 0.05);
     rbox(sp.legW + 0.02, 0.07, 0.28, body, 0, 0.04, 0.24, foot, 0.03);
@@ -101,11 +103,11 @@ export function createRobot(id) {
   }
 
   // ---------- Hông ----------
-  rbox(sp.legX * 2 + sp.legW * 0.6, 0.3, 0.55, trim, 0, HIP_Y + 0.05, 0, root, 0.06);
-  rbox(sp.legX * 2 + sp.legW * 0.62, 0.04, 0.57, rimMat, 0, HIP_Y + 0.2, 0, root, 0.01);
+  rbox(sp.legX * 2 + sp.legW * 0.6, 0.3, 0.55, trim, 0, hipY + 0.05, 0, root, 0.06);
+  rbox(sp.legX * 2 + sp.legW * 0.62, 0.04, 0.57, rimMat, 0, hipY + 0.2, 0, root, 0.01);
 
   // ---------- Thân trên (xoay ở eo) ----------
-  const waist = HIP_Y + 0.1;
+  const waist = hipY + 0.1;
   const torso = new THREE.Group();
   torso.position.set(0, waist, 0);
   root.add(torso);
@@ -261,9 +263,9 @@ export function createRobot(id) {
       if (!this.ko) {
         const reach = (leg) => {
           const h = leg.hip.rotation.x;
-          return THIGH * Math.cos(h) + SHIN * Math.cos(h + leg.knee.rotation.x);
+          return thigh * Math.cos(h) + shin * Math.cos(h + leg.knee.rotation.x);
         };
-        drop = Math.min(reach(legs.L), reach(legs.R)) - (THIGH + SHIN);
+        drop = Math.min(reach(legs.L), reach(legs.R)) - (thigh + shin);
       }
       ground.position.y = drop;
       // Bàn chân luôn nằm phẳng theo mặt sàn

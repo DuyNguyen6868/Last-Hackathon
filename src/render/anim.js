@@ -6,7 +6,7 @@ const JAB_L = {
   out: 110, hold: 50, back: 190,
 };
 const HOOK_L = {
-  peak: { shLx: -1.05, shLz: 0.95, elL: -1.55, twist: -0.85, bodyZ: 0.18, hipL: -0.35, kneeL: 0.65, hipR: 0.0, kneeR: 0.25 },
+  peak: { shLx: -0.15, shLz: 1.4, elL: -2.0, twist: -0.85, bodyZ: 0.18, hipL: -0.35, kneeL: 0.65, hipR: 0.0, kneeR: 0.25 },
   out: 170, hold: 60, back: 240,
 };
 const DODGE_L = {

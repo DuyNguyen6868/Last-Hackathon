@@ -18,8 +18,8 @@ const common = { bodyX: 0, bodyY: 0, bodyZ: 0, bodyRx: 0, bodyRz: 0, twist: 0, h
 export const BASE = {
   idle: {
     ...common,
-    shLx: -0.4, shLz: 0.14, elL: -0.7,
-    shRx: -0.4, shRz: -0.14, elR: -0.7,
+    shLx: -0.65, shLz: -0.05, elL: -1.35,
+    shRx: -0.65, shRz: 0.05, elR: -1.35,
     spineX: 0.04,
     hipL: -0.2, kneeL: 0.4, hipR: -0.12, kneeR: 0.32,
   },
